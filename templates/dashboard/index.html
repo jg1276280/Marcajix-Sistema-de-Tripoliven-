@@ -1,78 +1,167 @@
 {% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Resumen{% endblock %}
+{% block page_title %}Hola, {{ user.first_name|default:user.username }}{% endblock %}
+{% block page_subtitle %}<p>{{ today|date:"l, j \d\e F \d\e Y"|capfirst }}</p>{% endblock %}
+{% block page_actions %}
+  {% if door %}
+  <span class="status-live {% if reader.online %}is-online{% else %}is-offline{% endif %}" id="reader-status"><i class="dot"></i><span>{{ reader.label }}</span></span>
+  {% endif %}
+  {% if access.register_attendance %}<a class="btn btn-primary" href="{% url 'attendance_monitor' %}">{% icon "plus" %}<span class="btn-label">Registrar marcaje</span></a>{% endif %}
+  {% if analytics %}<a class="btn btn-secondary" href="{% url 'attendance_report' %}">{% icon "chart" %}<span class="btn-label">Ver reportes</span></a>{% endif %}
+{% endblock %}
 
-{% block title %}RESÚMEN / Marcajix{% endblock %}
-{% block page_route %}1.01 / RESÚMEN{% endblock %}
-{% block page_heading %}Resumen{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Actividad general del Sistema de Gestión Marcajix</p>{% endblock %}
-
-{% block dashboard_content %}
-<div class="dashboard-content">
-
-    {% if is_admin %}
-        <!-- Tarjetas de Métricas Estadísticas (Vista Administrador) -->
-        <section class="stats-grid">
-            
-            <article class="stat-card dark">
-                <div class="stat-top">
-                    <span>USUARIOS ACTIVOS EN EL SISTEMA</span>
-                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
-                </div>
-                <strong>{{ active_user_count|default:0|stringformat:"02d" }}</strong>
-                <small><i class="positive">{{ user_count|default:0 }}</i> registrados en total</small>
-            </article>
-
-            <article class="stat-card yellow">
-                <div class="stat-top">
-                    <span>EMPLEADOS ACTIVOS</span>
-                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
-                </div>
-                <strong>{{ active_employees_count|default:0|stringformat:"02d" }}</strong>
-                <small><i>{{ employee_count|default:0 }}</i> empleados registrados</small>
-            </article>
-
-            <article class="stat-card light">
-                <div class="stat-top">
-                    <span>MARCAJES HOY</span>
-                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
-                </div>
-                <strong>{{ today_logs_count|default:0|stringformat:"02d" }}</strong>
-                <small><i class="neutral">Eventos</i> registrados hoy</small>
-            </article>
-
-        </section>
-
-        <!-- Panel Informativo / Accesos Rápidos (Administración) -->
-        <section class="welcome-panel" style="margin-top: 24px;">
-            <div>
-                <span class="section-number">2.01 / ADMINISTRACIÓN</span>
-                <h2>Tripoliven<br><em style="color:var(--color-brand-violet);">en marcha.</em></h2>
-                <p>Centraliza el personal y registra cada entrada y salida manual con información clara para la operación diaria.</p>
-                <div style="margin-top: 18px;">
-                    <a class="button button-accent" href="{% url 'attendance_monitor' %}">Registrar marcaje <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>
-                </div>
-            </div>
-            <div class="panel-mark" style="color:var(--color-mist);">M</div>
-        </section>
-
-    {% else %}
-
-        <!-- Panel de Bienvenida (Vista Usuario Estándar) -->
-        <section class="welcome-panel user-welcome">
-            <div>
-                <span class="section-number">3.01 / CUENTA</span>
-                <h2>Todo listo para<br><em style="color:var(--color-brand-violet);">empezar.</em></h2>
-                <p>Accesos de tu rol{% if user_role %} ({{ user_role }}){% endif %}.</p>
-                <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px;">
-                    {% if access.monitor_door %}<a class="button button-accent" href="{% url 'attendance_monitor' %}">Marcajes de garita <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>{% endif %}
-                    {% if access.view_employees %}<a class="button button-outline" href="{% url 'employees:list' %}">Personal</a>{% endif %}
-                    {% if access.view_attendance_history %}<a class="button button-outline" href="{% url 'attendance_history' %}">Historial de marcajes</a>{% endif %}
-                    <a class="button button-outline" href="{% url 'profile' %}">Mi perfil</a>
-                </div>
-            </div>
-            <div class="panel-mark" style="color:var(--color-mist);">M</div>
-        </section>
-
+{% block page_content %}
+<div class="stack">
+  {% if door or analytics %}
+  <section class="kpis" aria-label="Indicadores de hoy">
+    <div class="kpi kpi-accent">
+      <span class="kpi-label">{% icon "users" "sm" %}Dentro ahora</span>
+      <span class="kpi-value" id="kpi-inside">{{ inside|length }}</span>
+      <span class="kpi-meta">{% if stale_count %}{{ stale_count }} sin salida registrada{% else %}Según el último movimiento{% endif %}</span>
+    </div>
+    {% if door %}
+    <div class="kpi">
+      <span class="kpi-label">{% icon "entry" "sm" %}Entradas hoy</span>
+      <span class="kpi-value" id="kpi-entries">{{ today_entries }}</span>
+      <span class="kpi-meta">Salidas: <span id="kpi-exits">{{ today_exits }}</span></span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">{% icon "alert" "sm" %}Alertas hoy</span>
+      <span class="kpi-value" id="kpi-alerts">{{ today_alerts }}</span>
+      <span class="kpi-meta">Tarjetas desconocidas y accesos denegados</span>
+    </div>
     {% endif %}
+    {% if analytics %}
+    <div class="kpi">
+      <span class="kpi-label">{% icon "clock" "sm" %}Horas esta semana</span>
+      <span class="kpi-value">{{ week_hours|hm }}<small>h</small></span>
+      <span class="kpi-meta">Extra: {{ week_overtime|hm }} h · Incidencias: {{ week_incidents }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">{% icon "calendar" "sm" %}Llegada promedio hoy</span>
+      <span class="kpi-value">{{ today_average_arrival|default:"—" }}</span>
+      <span class="kpi-meta">Primera entrada de cada persona</span>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
 
+  <div class="grid-main">
+    <div class="stack">
+      {% if door %}
+      <section class="card">
+        <header class="card-header">
+          <div><h2>Últimos movimientos</h2><p>Se actualiza automáticamente</p></div>
+          <a class="btn btn-ghost btn-sm" href="{% url 'attendance_history' %}">Ver todos {% icon "chevron" "sm" %}</a>
+        </header>
+        <div class="list list-scroll" id="recent-list">
+          {% for event in recent %}
+            {% include "partials/event_item.html" %}
+          {% empty %}
+            <div class="empty" id="recent-empty">{% icon "clock" %}<strong>Sin movimientos todavía</strong><span>Las lecturas del lector aparecerán aquí al instante.</span></div>
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if analytics %}
+      <section class="card">
+        <header class="card-header">
+          <div><h2>Horas trabajadas esta semana</h2><p>Suma de todo el personal por día</p></div>
+        </header>
+        <div class="card-body">
+          <div class="bars">
+            {% for item in week_chart %}
+            <div class="bar" title="{{ item.day|date:'l j' }}: {{ item.hours|hm }} h">
+              <span class="bar-value">{{ item.hours|hm }}</span>
+              <span class="bar-track"><span class="bar-fill {% if not item.hours %}is-zero{% endif %}" style="height: {{ item.percent }}%"></span></span>
+              <span class="bar-label">{{ item.day|date:"D j" }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
+      {% if admin %}
+      <section class="card">
+        <header class="card-header"><div><h2>Sistema</h2><p>Cuentas y personal registrado</p></div></header>
+        <dl class="facts">
+          <div class="fact"><dt>Usuarios activos</dt><dd>{{ active_users }}</dd></div>
+          <div class="fact"><dt>Empleados activos</dt><dd>{{ active_employees }} de {{ total_employees }}</dd></div>
+          <div class="fact"><dt>Accesos rápidos</dt><dd class="row"><a class="btn btn-secondary btn-sm" href="{% url 'user_list' %}">Usuarios</a><a class="btn btn-secondary btn-sm" href="{% url 'device_config' %}">Lector</a></dd></div>
+        </dl>
+      </section>
+      {% endif %}
+
+      {% if not door and not analytics and not admin %}
+      <section class="card"><div class="empty">{% icon "user" %}<strong>Bienvenido</strong><span>Tu cuenta no tiene módulos asignados. Contacta con Sistemas.</span></div></section>
+      {% endif %}
+    </div>
+
+    {% if door or analytics %}
+    <section class="card">
+      <header class="card-header">
+        <div><h2>Personas dentro</h2><p>Último movimiento: entrada</p></div>
+        <span class="badge">{{ inside|length }}</span>
+      </header>
+      <div class="list list-scroll">
+        {% for person in inside %}
+        <div class="list-item">
+          <span class="avatar">{% if person.photo %}<img src="{{ person.photo.url }}" alt="" loading="lazy">{% else %}{{ person.full_name|initials }}{% endif %}</span>
+          <div class="list-item-main"><strong>{{ person.full_name }}</strong><small>{{ person.position.department.name }} · {{ person.position.name }}</small></div>
+          <div class="list-item-side">
+            {% if person.stale %}<span class="badge badge-warning">Sin salida</span>{% endif %}
+            <span class="num">Desde {{ person.inside_since|date:"H:i" }}{% if person.inside_since|date:"Ymd" != today|date:"Ymd" %} · {{ person.inside_since|date:"d/m" }}{% endif %}</span>
+          </div>
+        </div>
+        {% empty %}
+        <div class="empty">{% icon "door" %}<strong>No hay nadie dentro</strong><span>Nadie tiene una entrada abierta.</span></div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+  </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if door %}
+<script>
+  // Movimientos en vivo: añade cada lectura nueva arriba y actualiza los contadores de hoy.
+  (() => {
+    const list = document.getElementById('recent-list');
+    const status = document.getElementById('reader-status');
+    const counters = { entry: 'kpi-entries', exit: 'kpi-exits', denied: 'kpi-alerts', unknown_card: 'kpi-alerts' };
+    const labels = { entry: ['Entrada', 'badge-success'], exit: ['Salida', 'badge-info'], denied: ['Denegado', 'badge-danger'], unknown_card: ['Tarjeta desconocida', 'badge-warning'] };
+    const bump = (id, delta) => { const node = document.getElementById(id); if (node) node.textContent = Math.max(0, Number(node.textContent) + delta); };
+    const render = (event) => {
+      const [label, tone] = labels[event.kind] || ['', ''];
+      const item = document.createElement('div');
+      item.className = 'list-item is-new';
+      const avatar = event.photo ? `<img src="${escapeHtml(event.photo)}" alt="">` : escapeHtml((event.name || '?').slice(0, 1).toUpperCase());
+      const detail = event.kind === 'unknown_card' ? `Código ${escapeHtml(event.card_code)}` : [event.department, event.kind === 'denied' ? event.message : ''].filter(Boolean).map(escapeHtml).join(' · ');
+      item.innerHTML = `<span class="avatar">${avatar}</span><div class="list-item-main"><strong>${escapeHtml(event.name || 'Tarjeta no registrada')}</strong><small>${detail}</small></div><div class="list-item-side"><span class="badge ${tone}">${label}</span><span class="num">${escapeHtml(event.time)}</span></div>`;
+      return item;
+    };
+    Marcajix.pollFeed('{% url "live_feed" %}', 2000, (data, first) => {
+      status.className = `status-live ${data.reader.online ? 'is-online' : 'is-offline'}`;
+      status.querySelector('span').textContent = data.reader.label;
+      if (first) return;
+      data.events.forEach((event) => {
+        document.getElementById('recent-empty')?.remove();
+        list.prepend(render(event));
+        if (counters[event.kind]) bump(counters[event.kind], 1);
+        if (event.kind === 'entry') bump('kpi-inside', 1);
+        if (event.kind === 'exit') bump('kpi-inside', -1);
+      });
+      while (list.children.length > 30) list.lastElementChild.remove();
+    }, () => {
+      status.className = 'status-live is-offline';
+      status.querySelector('span').textContent = 'Sin conexión con el servidor';
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

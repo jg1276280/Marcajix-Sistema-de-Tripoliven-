@@ -39,7 +39,20 @@ def _event_payload(kind, occurred_at, employee=None, message="", card_code=""):
     return {"kind": kind, "at": local.isoformat(), "time": local.strftime("%H:%M:%S"), "date": local.strftime("%d/%m/%Y"), "message": message, "card_code": card_code, **_employee_payload(employee)}
 
 
-def _reader_status():
+def recent_events(limit=10):
+    """Últimos movimientos y alertas de la garita, del más reciente al más antiguo."""
+    structure = ("employee__position__department",)
+    events = [(log.marked_at, _event_payload(log.mark_type, log.marked_at, log.employee)) for log in AttendanceLog.objects.select_related(*structure).order_by("-pk")[:limit]]
+    for event in SecurityEvent.objects.select_related(*structure).order_by("-pk")[:limit]:
+        if event.event_type == SecurityEvent.UNKNOWN_CARD:
+            events.append((event.occurred_at, _event_payload("unknown_card", event.occurred_at, message="Tarjeta no reconocida", card_code=event.hid_card_code)))
+        else:
+            events.append((event.occurred_at, _event_payload("denied", event.occurred_at, event.employee, message=event.reason)))
+    events.sort(key=lambda item: item[0], reverse=True)
+    return [payload for _, payload in events[:limit]]
+
+
+def reader_status():
     config = HIDReaderConfig.objects.filter(is_active=True).order_by("pk").first()
     if config is None:
         return {"online": False, "label": "Lector no configurado", "message": ""}
@@ -56,7 +69,7 @@ def build_feed(log_cursor, event_cursor):
     if log_cursor is None or event_cursor is None:
         latest_log = AttendanceLog.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
         latest_event = SecurityEvent.objects.order_by("-pk").values_list("pk", flat=True).first() or 0
-        return {"events": [], "cursor": {"log": latest_log, "event": latest_event}, "reader": _reader_status()}
+        return {"events": [], "cursor": {"log": latest_log, "event": latest_event}, "reader": reader_status()}
 
     structure = ("employee__position__department",)
     logs = list(AttendanceLog.objects.select_related(*structure).filter(pk__gt=log_cursor).order_by("pk")[:FEED_BATCH_SIZE])
@@ -71,7 +84,7 @@ def build_feed(log_cursor, event_cursor):
     return {
         "events": events,
         "cursor": {"log": logs[-1].pk if logs else log_cursor, "event": security_events[-1].pk if security_events else event_cursor},
-        "reader": _reader_status(),
+        "reader": reader_status(),
     }
 
 

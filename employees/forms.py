@@ -10,7 +10,7 @@ from .models import Department, Employee, Management, Position
 
 class EmployeeForm(forms.ModelForm):
     # Gerencia y departamento solo filtran la lista de cargos; el empleado guarda únicamente su cargo.
-    management = forms.ModelChoiceField(label="Gerencia", queryset=Management.objects.order_by("name"), required=False, empty_label="Selecciona una gerencia", widget=forms.Select(attrs={"data-management-select": "true"}))
+    management = forms.ModelChoiceField(label="Gerencia", queryset=Management.objects.order_by("name"), required=False, empty_label="Todas las gerencias", widget=forms.Select(attrs={"data-management-select": "true"}))
     department = forms.ModelChoiceField(label="Departamento", queryset=Department.objects.select_related("management").order_by("name"), required=False, empty_label="Selecciona un departamento", widget=forms.Select(attrs={"data-department-select": "true"}))
     position = forms.ModelChoiceField(label="Cargo", queryset=Position.objects.select_related("department__management").order_by("name"), empty_label="Selecciona un cargo", widget=forms.Select(attrs={"data-position-select": "true"}))
 
@@ -24,8 +24,9 @@ class EmployeeForm(forms.ModelForm):
             "emergency_phone": forms.TextInput(attrs={"placeholder": "Teléfono opcional"}),
             "emergency_contact_name": forms.TextInput(attrs={"placeholder": "Nombre opcional"}),
             "photo": forms.ClearableFileInput(attrs={"accept": "image/*", "class": "photo-input"}),
-            "birthday": forms.DateInput(attrs={"type": "date"}),
-            "hire_date": forms.DateInput(attrs={"type": "date"}),
+            # <input type="date"> solo acepta AAAA-MM-DD; con el formato local quedaría vacío al editar.
+            "birthday": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "hire_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
     def clean_photo(self):
@@ -107,8 +108,6 @@ class EmployeeForm(forms.ModelForm):
         if self.instance.pk:
             self.fields["department"].initial = self.instance.position.department_id
             self.fields["management"].initial = self.instance.position.department.management_id
-        for field in self.fields.values():
-            field.help_text = "Campo requerido" if field.required else "Campo opcional"
 
 
 class ManagementForm(forms.ModelForm):
@@ -131,6 +130,10 @@ class DepartmentForm(forms.ModelForm):
         fields = ("management", "name")
         widgets = {"name": forms.TextInput(attrs={"placeholder": "Ej. Nómina"})}
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["management"].empty_label = "Seleccione una gerencia"
+
 
 class DepartmentRenameForm(forms.ModelForm):
     class Meta:
@@ -147,6 +150,8 @@ class PositionForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["department"].queryset = Department.objects.select_related("management").order_by("management__name", "name")
+        self.fields["department"].empty_label = "Seleccione un departamento"
+        self.fields["department"].label_from_instance = lambda department: f"{department.name} · {department.management.name}"
 
 
 class PositionRenameForm(forms.ModelForm):

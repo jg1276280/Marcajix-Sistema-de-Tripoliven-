@@ -1,197 +1,121 @@
 {% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Movimientos{% endblock %}
+{% block page_title %}Movimientos{% endblock %}
+{% block page_subtitle %}<p>Todas las entradas, salidas y alertas registradas en la garita</p>{% endblock %}
 
-{% block title %}Historial de marcajes / Marcajix{% endblock %}
-{% block page_route %}1.04 / MARCAJES{% endblock %}
-{% block page_heading %}Historial de marcajes{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Consulta y filtra los eventos de entrada y salida registrados en el sistema.</p>{% endblock %}
+{% block page_content %}
+<div class="stack">
+  <form class="card card-body filters" method="get" action="{% url 'attendance_history' %}">
+    <div class="field field-wide">
+      <label for="filter-employee">Empleados</label>
+      <div class="search">
+        {% icon "search" %}
+        <input id="filter-employee" class="input" type="search" autocomplete="off" placeholder="Añadir por nombre, cédula o tarjeta">
+        <div id="employee-popover" class="popover-results" hidden></div>
+      </div>
+      <div id="employee-chips" class="chips">
+        {% for employee in selected_employees %}
+        <span class="chip" data-id="{{ employee.pk }}">{{ employee.full_name }}<button type="button" aria-label="Quitar {{ employee.full_name }}">{% icon "x" "sm" %}</button><input type="hidden" name="employee" value="{{ employee.pk }}"></span>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <label for="filter-q">Texto</label>
+      <input id="filter-q" class="input" type="search" name="q" value="{{ query }}" placeholder="Nombre, cédula o motivo">
+    </div>
+    <div class="field">
+      <label for="filter-from">Desde</label>
+      <input id="filter-from" class="input" type="date" name="from" value="{{ date_from }}">
+    </div>
+    <div class="field">
+      <label for="filter-to">Hasta</label>
+      <input id="filter-to" class="input" type="date" name="to" value="{{ date_to }}">
+    </div>
+    <div class="field">
+      <label for="filter-department">Departamento</label>
+      <select id="filter-department" class="select" name="department">
+        <option value="">Todos</option>
+        {% for item in departments %}<option value="{{ item }}" {% if department == item %}selected{% endif %}>{{ item }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" type="submit">Filtrar</button>
+      <a class="btn btn-ghost" href="{% url 'attendance_history' %}">Limpiar</a>
+    </div>
+  </form>
 
-{% block dashboard_content %}
-<div class="dashboard-content attendance-page attendance-history-page">
-
-    <!-- Barra de Filtros -->
-    <form class="attendance-filters" method="get" action="{% url 'attendance_history' %}">
-        
-        <div class="filter-group history-employee-filter">
-            <label for="filter-query">Empleados</label>
-            <div class="history-employee-search">
-                <input id="filter-query" type="search" autocomplete="off" placeholder="Busca por nombre, identificación o tarjeta...">
-                <div id="history-search-results" class="history-search-results" role="listbox" aria-label="Resultados de empleados" hidden></div>
-            </div>
-            <div id="history-selected-employees" class="history-selected-employees" aria-live="polite">
-                {% for employee in selected_employees %}
-                    <span class="history-employee-chip" data-id="{{ employee.pk }}">
-                        {{ employee.full_name }}<button type="button" class="history-chip-remove" aria-label="Quitar {{ employee.full_name }}">&times;</button>
-                        <input type="hidden" name="employee" value="{{ employee.pk }}">
-                    </span>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="filter-group">
-            <label for="filter-from">Desde</label>
-            <input id="filter-from" type="date" name="from" value="{{ date_from }}">
-        </div>
-
-        <div class="filter-group">
-            <label for="filter-to">Hasta</label>
-            <input id="filter-to" type="date" name="to" value="{{ date_to }}">
-        </div>
-
-        <div class="filter-group">
-            <label for="filter-dept" class="visually-hidden">Departamento</label>
-            <select id="filter-dept" name="department">
-                <option value="">Todos los departamentos</option>
-                {% for item in departments %}
-                    <option value="{{ item }}" {% if department == item %}selected{% endif %}>
-                        {{ item }}
-                    </option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="filter-actions">
-            <button class="button button-accent" type="submit">Filtrar</button>
-            <a href="{% url 'attendance_history' %}" class="button button-outline button-clear" title="Limpiar filtros" aria-label="Limpiar filtros"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg><span class="button-text">Limpiar</span></a>
-        </div>
-    </form>
-
-    <!-- Tabla / Panel de Resultados -->
-    <section class="data-panel history-panel">
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th scope="col">Empleado</th>
-                        <th scope="col">Departamento</th>
-                        <th scope="col">Código de tarjeta</th>
-                        <th scope="col">Tipo</th>
-                        <th scope="col">Fecha y hora</th>
-                        <th scope="col">Registrado por</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for event in page_obj %}
-                        {% if event.kind == 'attempt' %}
-                        {% with attempt=event.record %}
-                        <tr>
-                            <td><div class="employee-cell"><strong>{% if attempt.employee %}{{ attempt.employee.full_name }}{% elif attempt.event_type == 'unknown_card' %}Tarjeta desconocida{% else %}Empleado eliminado{% endif %}</strong></div></td>
-                            <td><span>{{ attempt.employee.department|default:"—" }}</span></td>
-                            <td><span>{{ attempt.hid_card_code|default:"—" }}</span></td>
-                            <td><span class="attendance-anomaly-badge">{{ attempt.get_event_type_display }}</span></td>
-                            <td><time datetime="{{ attempt.occurred_at|date:'Y-m-d H:i:s' }}">{{ attempt.occurred_at|date:"d/m/Y H:i:s" }}</time></td>
-                            <td><span class="capture-pill">{{ attempt.reason }}{% if attempt.attempted_by %} · @{{ attempt.attempted_by.username }}{% endif %}</span></td>
-                        </tr>
-                        {% endwith %}
-                        {% else %}
-                        {% with log=event.record %}
-                        <tr>
-                            <td><div class="employee-cell"><strong>{{ log.employee.full_name }}</strong></div></td>
-                            <td><span>{{ log.employee.department|default:"—" }}</span></td>
-                            <td><span>{{ log.employee.hid_card_code|default:"—" }}</span></td>
-                            <td><span class="mark-pill {{ log.mark_type }}">{{ log.get_mark_type_display }}</span></td>
-                            <td><time datetime="{{ log.marked_at|date:'Y-m-d H:i:s' }}">{{ log.marked_at|date:"d/m/Y H:i:s" }}</time></td>
-                            <td><span class="capture-pill">{% if log.registered_by %}@{{ log.registered_by.username }}{% else %}Registro manual{% endif %}</span></td>
-                        </tr>
-                        {% endwith %}
-                        {% endif %}
-                    {% empty %}
-                        <tr>
-                            <td class="empty-state" colspan="6">
-                                No se encontraron marcajes para los filtros seleccionados.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Paginador General -->
-        {% if page_obj.paginator.num_pages > 1 %}
-            <nav class="pagination-container" aria-label="Navegación del historial">
-                <div class="pagination-info">
-                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                </div>
-                
-                <div class="pagination-actions">
-                    {% if page_obj.has_previous %}
-                        <a class="button button-outline button-sm" 
-                           href="?page={{ page_obj.previous_page_number }}{% for employee_id in employee_ids %}&employee={{ employee_id }}{% endfor %}&from={{ date_from }}&to={{ date_to }}&department={{ department }}">
-                            <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Anterior
-                        </a>
-                    {% endif %}
-
-                    {% if page_obj.has_next %}
-                        <a class="button button-outline button-sm" 
-                           href="?page={{ page_obj.next_page_number }}{% for employee_id in employee_ids %}&employee={{ employee_id }}{% endfor %}&from={{ date_from }}&to={{ date_to }}&department={{ department }}">
-                            Siguiente <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                        </a>
-                    {% endif %}
-                </div>
-            </nav>
-        {% endif %}
-    </section>
-
+  <section class="card card-flush">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Persona</th><th>Departamento</th><th>Movimiento</th><th>Fecha y hora</th><th>Origen</th></tr></thead>
+        <tbody>
+          {% for event in page_obj %}
+          {% with record=event.record %}
+          {% if event.kind == "attempt" %}
+          <tr>
+            <td><div class="cell-person"><span class="avatar avatar-sm">{% if record.employee %}{{ record.employee.full_name|initials }}{% else %}?{% endif %}</span><div><strong>{% if record.employee %}{{ record.employee.full_name }}{% else %}Tarjeta no registrada{% endif %}</strong><small class="mono">{{ record.hid_card_code|default:"—" }}</small></div></div></td>
+            <td>{{ record.employee.department|default:"—" }}</td>
+            <td>{% if record.event_type == "unknown_card" %}<span class="badge badge-warning">Tarjeta desconocida</span>{% else %}<span class="badge badge-danger">Acceso denegado</span>{% endif %}</td>
+            <td class="num nowrap">{{ record.occurred_at|date:"d/m/Y H:i:s" }}</td>
+            <td class="muted">{{ record.reason }}{% if record.attempted_by %} · @{{ record.attempted_by.username }}{% endif %}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td><div class="cell-person"><span class="avatar avatar-sm">{{ record.employee.full_name|initials }}</span><div><strong>{{ record.employee.full_name }}</strong><small class="mono">{{ record.employee.hid_card_code|default:"Sin tarjeta" }}</small></div></div></td>
+            <td>{{ record.employee.department }}</td>
+            <td>{% if record.mark_type == "entry" %}<span class="badge badge-success">Entrada</span>{% else %}<span class="badge badge-info">Salida</span>{% endif %}</td>
+            <td class="num nowrap">{{ record.marked_at|date:"d/m/Y H:i:s" }}</td>
+            <td class="muted">{% if record.capture_mode == "hid" %}Lector de tarjetas{% else %}Manual{% if record.registered_by %} · @{{ record.registered_by.username }}{% endif %}{% endif %}</td>
+          </tr>
+          {% endif %}
+          {% endwith %}
+          {% empty %}
+          <tr><td colspan="5"><div class="empty">{% icon "clock" %}<strong>Sin movimientos</strong><span>No hay registros para los filtros seleccionados.</span></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </section>
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const search = document.getElementById('filter-query');
-    const results = document.getElementById('history-search-results');
-    const selected = document.getElementById('history-selected-employees');
-    if (!search || !results || !selected) return;
-
-    const selectedIds = () => new Set([...selected.querySelectorAll('input[name="employee"]')].map((input) => input.value));
-    const renderResults = (employees) => {
-        const ids = selectedIds();
-        results.innerHTML = employees.map((employee) => `
-            <button type="button" class="history-search-result ${ids.has(String(employee.id)) ? 'is-selected' : ''}" data-id="${escapeHtml(employee.id)}" data-name="${escapeHtml(employee.name)}">
-                <span><strong>${escapeHtml(employee.name)}</strong><small>${escapeHtml(employee.hid_card_code)} · ${escapeHtml(employee.department)}</small></span>
-                <span>${ids.has(String(employee.id)) ? 'Seleccionado' : 'Seleccionar'}</span>
-            </button>
-        `).join('') || '<p class="history-search-empty">No encontramos empleados.</p>';
-        results.hidden = false;
-    };
-
-    let timer;
-    search.addEventListener('input', () => {
-        clearTimeout(timer);
-        const query = search.value.trim();
-        if (!query) { results.hidden = true; return; }
-        timer = setTimeout(async () => {
-            try {
-                const response = await fetch(`{% url 'attendance_employee_search' %}?include_inactive=1&q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-                renderResults(data.employees || []);
-            } catch (error) {
-                results.innerHTML = '<p class="history-search-empty">No se pudo consultar el personal.</p>';
-                results.hidden = false;
-            }
-        }, 180);
-    });
-
-    results.addEventListener('click', (event) => {
-        const button = event.target.closest('.history-search-result');
-        if (!button || selectedIds().has(button.dataset.id)) return;
-        const chip = document.createElement('span');
-        chip.className = 'history-employee-chip';
-        chip.dataset.id = button.dataset.id;
-        chip.innerHTML = `${escapeHtml(button.dataset.name)}<button type="button" class="history-chip-remove" aria-label="Quitar ${escapeHtml(button.dataset.name)}">&times;</button><input type="hidden" name="employee" value="${escapeHtml(button.dataset.id)}">`;
-        selected.appendChild(chip);
-        search.value = '';
-        results.hidden = true;
-        search.focus();
-    });
-
-    selected.addEventListener('click', (event) => {
-        const remove = event.target.closest('.history-chip-remove');
-        if (remove) remove.closest('.history-employee-chip').remove();
-    });
-
-    document.addEventListener('click', (event) => {
-        if (!event.target.closest('.history-employee-filter')) results.hidden = true;
-    });
-});
+(() => {
+  const input = document.getElementById('filter-employee');
+  const popover = document.getElementById('employee-popover');
+  const chips = document.getElementById('employee-chips');
+  const selectedIds = () => new Set([...chips.querySelectorAll('input[name="employee"]')].map((field) => field.value));
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const query = input.value.trim();
+    if (!query) { popover.hidden = true; return; }
+    timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`{% url 'attendance_employee_search' %}?include_inactive=1&q=${encodeURIComponent(query)}`);
+        const employees = ((await response.json()).employees || []).filter((employee) => !selectedIds().has(String(employee.id)));
+        popover.innerHTML = employees.map((employee) => `<button type="button" class="result-item" data-id="${escapeHtml(employee.id)}" data-name="${escapeHtml(employee.name)}"><span class="avatar avatar-sm">${escapeHtml(employee.initial)}</span><span class="list-item-main"><strong>${escapeHtml(employee.name)}</strong><small>${escapeHtml(employee.department)}</small></span></button>`).join('') || '<div class="empty">Sin resultados</div>';
+        popover.hidden = false;
+      } catch (error) {
+        popover.hidden = true;
+      }
+    }, 180);
+  });
+  popover.addEventListener('click', (event) => {
+    const button = event.target.closest('.result-item');
+    if (!button) return;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.innerHTML = `${escapeHtml(button.dataset.name)}<button type="button" aria-label="Quitar"><svg class="icon icon-sm"><use href="#i-x"/></svg></button><input type="hidden" name="employee" value="${escapeHtml(button.dataset.id)}">`;
+    chips.appendChild(chip);
+    input.value = '';
+    popover.hidden = true;
+  });
+  chips.addEventListener('click', (event) => event.target.closest('button')?.closest('.chip').remove());
+  document.addEventListener('click', (event) => { if (!event.target.closest('.search')) popover.hidden = true; });
+})();
 </script>
 {% endblock %}

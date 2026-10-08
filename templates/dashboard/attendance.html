@@ -1,419 +1,244 @@
 {% extends "dashboard/base.html" %}
-
-{% block title %}Registro de marcajes / Marcajix{% endblock %}
-{% block body_class %}dashboard-page attendance-workspace{% endblock %}
-{% block page_route %}1.03 / MARCAJES{% endblock %}
-{% block page_heading %}Registrar marcajes{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Selecciona empleados y confirma cada registro de entrada o salida.</p>{% endblock %}
-
-{% block topbar_actions %}
-    <span id="live-status" class="status inactive" role="status" aria-live="polite"><i class="status-dot"></i> Comprobando lector...</span>
+{% load ui %}
+{% block title %}Garita{% endblock %}
+{% block page_title %}Garita{% endblock %}
+{% block page_subtitle %}<p>Movimientos en vivo y registro manual para personal sin tarjeta</p>{% endblock %}
+{% block page_actions %}
+  <span class="status-live {% if reader.online %}is-online{% else %}is-offline{% endif %}" id="reader-status"><i class="dot"></i><span>{{ reader.label }}</span></span>
+  <a class="btn btn-secondary" href="{% url 'kiosk_display' %}" target="_blank" rel="noopener">{% icon "monitor" %}<span class="btn-label">Pantalla exterior</span></a>
 {% endblock %}
 
-{% block dashboard_content %}
-<div class="dashboard-content attendance-page manual-attendance-page">
+{% block page_content %}
+<div class="grid-main">
+  {% if access.register_attendance %}
+  <form id="attendance-form" class="card" method="post" action="{% url 'attendance_register' %}">
+    {% csrf_token %}
+    <input type="hidden" name="capture_mode" value="manual">
+    <input type="hidden" name="rows" id="attendance-rows">
+    <header class="card-header">
+      <div><h2>Registro manual</h2><p>Para empleados sin tarjeta. Puede cargar varios a la vez (últimas {{ window_hours }} h).</p></div>
+      <span class="badge badge-brand" id="row-count">0 seleccionados</span>
+    </header>
+    <div class="card-body stack">
+      <div class="search">
+        {% icon "search" %}
+        <input id="employee-search" class="input" type="search" autocomplete="off" placeholder="Buscar por nombre, cédula, tarjeta o departamento" aria-label="Buscar empleado">
+      </div>
+      <div id="employee-results" class="results" aria-live="polite"></div>
+    </div>
+    <div id="attendance-rows-list"></div>
+    <footer class="card-footer row-between">
+      <div id="attendance-message" class="text-sm muted" role="status" aria-live="polite">Seleccione empleados para armar el lote.</div>
+      <button type="submit" id="submit-attendance" class="btn btn-primary" disabled>{% icon "check" %}Registrar marcajes</button>
+    </footer>
+  </form>
+  {% endif %}
 
-    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
-
-    <!-- Formulario Principal de Carga Manual -->
-    <form id="attendance-form" class="manual-loader" method="post" action="{% url 'attendance_register' %}">
-        {% csrf_token %}
-        <input type="hidden" name="capture_mode" value="manual">
-        <input type="hidden" name="rows" id="attendance-rows">
-
-        <!-- Sección 01: Selección de empleados -->
-        <section class="admin-form" style="margin-top: 0; margin-bottom: 24px;">
-            <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
-                <div>
-                    <span class="section-number">1.03.1 / SELECCIÓN</span>
-                    <h3 id="selection-heading" style="margin: 4px 0 0; font-size: 20px; font-family: var(--font-plus-jakarta-sans); font-weight: 800; letter-spacing: -0.03em;">Añadir empleados al registro</h3>
-                </div>
-                <span id="row-count" class="role-badge admin" style="font-size: 11px;">0 seleccionados</span>
-            </header>
-
-            <div class="search-form" style="width: 100%; max-width: none; margin-bottom: 16px;">
-                <input id="employee-search" type="search" autocomplete="off" autofocus placeholder="Buscar por nombre, C.I. o Código de Tarjeta HID...">
-                <button id="clear-search" class="clear-control icon-button" type="button" aria-label="Limpiar búsqueda" hidden style="background: transparent; border: 0; padding: 0;">
-                    <svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg>
-                </button>
-            </div>
-
-            <div id="employee-results" class="employee-results" aria-live="polite" style="min-height: 50px;">
-                <p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>
-            </div>
-        </section>
-
-        <!-- Sección 02: Revisión y confirmación de marcajes -->
-        <section class="admin-form" style="margin-top: 0;">
-            <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
-                <div>
-                    <span class="section-number">1.03.2 / REVISIÓN</span>
-                    <h3 id="review-heading" style="margin: 4px 0 0; font-size: 20px; font-family: var(--font-plus-jakarta-sans); font-weight: 800; letter-spacing: -0.03em;">Confirmar marcajes</h3>
-                </div>
-                <span class="page-description" style="margin: 0; font-size: 12px; font-family: var(--font-sometype-mono);">Ventana: Últimas 72 horas</span>
-            </header>
-
-            <div class="data-panel" style="box-shadow: none; border-radius: 12px;">
-                <div class="table-scroll">
-                    <div class="manual-table-head" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; padding: 14px 18px; background: var(--color-mist); font-family: var(--font-sometype-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--color-ash);">
-                        <span>Empleado</span>
-                        <span>Tipo</span>
-                        <span>Último evento</span>
-                        <span>Fecha y hora</span>
-                        <span>Acciones</span>
-                    </div>
-                    <div id="attendance-rows-list">
-                        <p class="table-empty" style="padding: 36px 20px; text-align: center; color: var(--color-slate); font-size: 13px;">Selecciona empleados desde el buscador para armar el lote.</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="manual-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-bone);">
-                <div id="attendance-message" class="attendance-feedback" aria-live="polite" aria-atomic="true" role="status">
-                    <span class="feedback-icon" aria-hidden="true"></span>
-                    <span class="feedback-copy">
-                        <strong class="feedback-title"></strong>
-                        <span class="feedback-detail"></span>
-                    </span>
-                </div>
-                <button type="submit" id="submit-attendance" class="button button-accent" disabled style="min-height: 44px; padding: 12px 28px; white-space: nowrap;">
-                    Procesar marcajes <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                </button>
-            </div>
-        </section>
-    </form>
+  <section class="card">
+    <header class="card-header">
+      <div><h2>En vivo</h2><p>Lector HID y registros manuales</p></div>
+    </header>
+    <div class="list list-scroll" id="recent-list">
+      {% for event in recent %}
+        {% include "partials/event_item.html" %}
+      {% empty %}
+        <div class="empty" id="recent-empty">{% icon "clock" %}<strong>Sin movimientos todavía</strong><span>Cada tarjeta leída aparecerá aquí al instante.</span></div>
+      {% endfor %}
+    </div>
+  </section>
 </div>
+{% endblock %}
 
-<!-- Lógica JavaScript de Carga e Interacción -->
+{% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const form = document.getElementById('attendance-form');
-    const search = document.getElementById('employee-search');
-    const results = document.getElementById('employee-results');
-    const rowsList = document.getElementById('attendance-rows-list');
-    const rowsInput = document.getElementById('attendance-rows');
-    const message = document.getElementById('attendance-message');
-    const submit = document.getElementById('submit-attendance');
-    const rowCount = document.getElementById('row-count');
-    const clearSearch = document.getElementById('clear-search');
-    const feedbackTitle = message.querySelector('.feedback-title');
-    const feedbackDetail = message.querySelector('.feedback-detail');
-    const draftStorageKey = 'marcajix.manual-attendance-draft';
+(() => {
+  const LABELS = { entry: ['Entrada', 'badge-success'], exit: ['Salida', 'badge-info'], denied: ['Denegado', 'badge-danger'], unknown_card: ['Tarjeta desconocida', 'badge-warning'] };
+  const status = document.getElementById('reader-status');
+  const list = document.getElementById('recent-list');
 
-    const playAlertTone = () => {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (!AudioContext) return;
-        const context = new AudioContext();
-        const oscillator = context.createOscillator();
-        const gain = context.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 440;
-        gain.gain.setValueAtTime(0.0001, context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.24);
-        oscillator.connect(gain).connect(context.destination);
-        oscillator.start();
-        oscillator.stop(context.currentTime + 0.25);
-        oscillator.addEventListener('ended', () => context.close(), { once: true });
-    };
-
-    const setFeedback = (text, state) => {
-        message.className = `attendance-feedback ${state}`;
-        const styles = {
-            'is-loading': 'color:#607568;background:#f2f6f3;border-color:#dbe7de',
-            'is-success': 'color:#087b36;background:#eaf8ee;border-color:#a9ddb7',
-            'is-warning': 'color:#805f00;background:#fffbeb;border-color:#efd27a',
-            'is-error': 'color:#a52f2f;background:#fff0f0;border-color:#efb3b3'
-        };
-        message.style.cssText = styles[state] || '';
-        const title = state === 'is-error' ? 'Revisa los marcajes' : state === 'is-warning' ? 'Marcajes pendientes' : state === 'is-success' ? 'Carga completada' : 'Procesando marcajes';
-        feedbackTitle.textContent = title;
-        feedbackDetail.textContent = text;
-    };
-
-    const selected = new Map();
-    const now = new Date();
-    // Monitor en vivo: consulta los eventos de la garita (lector HID y registros manuales) cada 2 segundos.
-    const liveStatus = document.getElementById('live-status');
-    const setLiveStatus = (ok, label) => {
-        if (!liveStatus) return;
-        liveStatus.className = ok ? 'status active' : 'status inactive';
-        liveStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(label)}`;
-    };
-    const LIVE_MESSAGES = {
-        entry: (event) => [`Entrada: ${event.name}`, 'success'],
-        exit: (event) => [`Salida: ${event.name}`, 'success'],
-        denied: (event) => [`Acceso denegado: ${event.name}. ${event.message}`, 'error'],
-        unknown_card: (event) => [`Tarjeta no reconocida (${event.card_code})`, 'warning'],
-    };
-    const toastStack = document.getElementById('toast-stack');
-    const showToast = (message, tone = 'info') => {
-        const toast = document.createElement('div');
-        toast.className = `toast toast-${tone}`;
-        toast.innerHTML = `<div class="toast-content">${escapeHtml(message)}</div><button type="button" class="toast-close" aria-label="Cerrar">×</button>`;
-        toastStack.appendChild(toast);
-        const close = () => toast.remove();
-        toast.querySelector('.toast-close').addEventListener('click', close);
-        setTimeout(close, 6000);
-    };
-    let liveCursor = null;
-    const pollLiveFeed = async () => {
-        try {
-            const params = liveCursor ? `?log=${liveCursor.log}&event=${liveCursor.event}` : '';
-            const response = await fetch(`{% url 'live_feed' %}${params}`, { cache: 'no-store' });
-            if (!response.ok) throw new Error(response.status);
-            const data = await response.json();
-            liveCursor = data.cursor;
-            setLiveStatus(data.reader.online, data.reader.label);
-            data.events.forEach((event) => {
-                const build = LIVE_MESSAGES[event.kind];
-                if (build) showToast(...build(event));
-            });
-        } catch (error) {
-            setLiveStatus(false, 'Sin conexión con el servidor');
-        } finally {
-            setTimeout(pollLiveFeed, 2000);
-        }
-    };
-    pollLiveFeed();
-
-    const saveDraft = () => {
-        sessionStorage.setItem(draftStorageKey, JSON.stringify([...selected.values()]));
-    };
-
-    const restoreDraft = () => {
-        try {
-            const draft = JSON.parse(sessionStorage.getItem(draftStorageKey) || '[]');
-            if (Array.isArray(draft)) {
-                draft.forEach((employee) => {
-                    if (employee && employee.id && employee.name) {
-                        selected.set(String(employee.id), employee);
-                    }
-                });
-            }
-        } catch (error) {
-            sessionStorage.removeItem(draftStorageKey);
-        }
-    };
-    
-    // Cálculo de rango de fechas local (Ventana de 72 horas)
-    const localValue = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    const minDate = localValue(new Date(now.getTime() - 72 * 60 * 60 * 1000));
-    const maxDate = localValue(now);
-
-    // Renderizado dinámico manteniendo estado de campos
-    const renderRows = () => {
-        rowCount.textContent = `${selected.size} seleccionado${selected.size === 1 ? '' : 's'}`;
-        submit.disabled = !selected.size;
-
-        if (!selected.size) {
-            rowsList.innerHTML = '<p class="table-empty" style="padding: 36px 20px; text-align: center; color: var(--color-slate); font-size: 13px;">Selecciona empleados desde el buscador para armar el lote.</p>';
-            return;
-        }
-
-        rowsList.innerHTML = [...selected.values()].map((emp) => `
-            <div class="manual-row ${emp.error ? 'has-error' : ''}" data-id="${escapeHtml(emp.id)}" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--color-bone);">
-                <div class="manual-employee" style="display: flex; align-items: center; gap: 12px; min-width: 0;">
-                    <span class="employee-avatar" style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-family: var(--font-plus-jakarta-sans); font-weight: 800; font-size: 12px;">${escapeHtml(emp.initial)}</span>
-                    <div style="min-width: 0;">
-                        <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-plus-jakarta-sans); font-weight: 700; color: var(--color-onyx);">${escapeHtml(emp.name)}</strong>
-                        <small style="display: block; color: var(--color-slate); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(emp.hid_card_code)} · ${escapeHtml(emp.department)}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
-                    </div>
-                </div>
-
-                <select class="row-mark-type" aria-label="Tipo para ${escapeHtml(emp.name)}" style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
-                    <option value="entry" ${emp.mark_type === 'entry' ? 'selected' : ''}>Entrada</option>
-                    <option value="exit" ${emp.mark_type === 'exit' ? 'selected' : ''}>Salida</option>
-                </select>
-
-                <span class="last-mark" style="color: var(--color-slate); font-size: 11px;">Último: ${escapeHtml(emp.last_mark)}</span>
-
-                <input class="row-datetime" type="datetime-local" 
-                       min="${minDate}" max="${maxDate}" 
-                       value="${emp.marked_at}" 
-                       aria-label="Fecha y hora para ${escapeHtml(emp.name)}"
-                       style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
-
-                <button type="button" class="remove-row" aria-label="Quitar ${escapeHtml(emp.name)}" style="display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #fca5a5; border-radius: 9999px; background: #fef2f2; color: #dc2626; cursor: pointer;"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
-                <p class="row-error" style="grid-column: 1 / -1; margin: 4px 0 0; color: #dc2626; font-size: 12px; font-weight: 600;">${escapeHtml(emp.error || '')}</p>
-            </div>
-        `).join('');
-    };
-
-    // Búsqueda AJAX de empleados
-    const searchEmployees = async () => {
-        const query = search.value.trim();
-        if (!query) {
-            results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>';
-            return;
-        }
-
-        try {
-            const response = await fetch(`{% url 'attendance_employee_search' %}?q=${encodeURIComponent(query)}`);
-            const data = await response.json();
-
-            if (!data.employees.length) {
-                results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">No encontramos empleados activos.</p>';
-                return;
-            }
-
-            results.innerHTML = data.employees.map((emp) => `
-                <button type="button" class="employee-result ${selected.has(String(emp.id)) ? 'is-selected' : ''}" 
-                        data-id="${escapeHtml(emp.id)}" 
-                        data-last-mark="${escapeHtml(emp.last_mark)}"
-                        data-status="${escapeHtml(emp.status)}"
-                        style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border: 1px solid var(--color-bone); border-radius: 10px; background: #ffffff; margin-bottom: 6px; cursor: pointer; text-align: left;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="employee-avatar" style="width: 28px; height: 28px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800;">${escapeHtml(emp.initial)}</span>
-                        <span>
-                            <strong style="display: block; font-family: var(--font-plus-jakarta-sans); font-size: 13px; color: var(--color-onyx);">${escapeHtml(emp.name)}</strong>
-                            <small style="display: block; font-size: 11px; color: var(--color-slate);">${escapeHtml(emp.hid_card_code)} · ${escapeHtml(emp.department)}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
-                        </span>
-                    </div>
-                    <span class="button button-outline" style="min-height: 28px; padding: 4px 12px; font-size: 11px;">${selected.has(String(emp.id)) ? 'Añadido ✓' : '+ Añadir'}</span>
-                </button>
-            `).join('');
-        } catch (err) {
-            results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Error al consultar el servidor.</p>';
-        }
-    };
-
-    // Debounce para optimizar peticiones en el input
-    let searchTimer;
-    search.addEventListener('input', () => {
-        clearSearch.hidden = !search.value.trim();
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(searchEmployees, 180);
+  // ---------- En vivo ----------
+  const renderEvent = (event) => {
+    const [label, tone] = LABELS[event.kind] || ['', ''];
+    const item = document.createElement('div');
+    item.className = 'list-item is-new';
+    const avatar = event.photo ? `<img src="${escapeHtml(event.photo)}" alt="">` : escapeHtml((event.name || '?').slice(0, 1).toUpperCase());
+    const detail = event.kind === 'unknown_card' ? `Código ${escapeHtml(event.card_code)}` : [event.department, event.kind === 'denied' ? event.message : ''].filter(Boolean).map(escapeHtml).join(' · ');
+    item.innerHTML = `<span class="avatar">${avatar}</span><div class="list-item-main"><strong>${escapeHtml(event.name || 'Tarjeta no registrada')}</strong><small>${detail}</small></div><div class="list-item-side"><span class="badge ${tone}">${label}</span><span class="num">${escapeHtml(event.time)}</span></div>`;
+    return item;
+  };
+  const alertTone = () => {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 440;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.25);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.26);
+    oscillator.addEventListener('ended', () => context.close(), { once: true });
+  };
+  Marcajix.pollFeed('{% url "live_feed" %}', 2000, (data, first) => {
+    status.className = `status-live ${data.reader.online ? 'is-online' : 'is-offline'}`;
+    status.querySelector('span').textContent = data.reader.label;
+    if (first) return;
+    data.events.forEach((event) => {
+      document.getElementById('recent-empty')?.remove();
+      list.prepend(renderEvent(event));
+      if (event.kind === 'denied' || event.kind === 'unknown_card') {
+        alertTone();
+        Marcajix.toast(event.kind === 'denied' ? `Acceso denegado: ${event.name}` : `Tarjeta no reconocida (${event.card_code})`, 'error');
+      }
     });
+    while (list.children.length > 40) list.lastElementChild.remove();
+  }, () => {
+    status.className = 'status-live is-offline';
+    status.querySelector('span').textContent = 'Sin conexión con el servidor';
+  });
 
-    // Agregar / Quitar desde los resultados de búsqueda
-    results.addEventListener('click', (event) => {
-        const item = event.target.closest('.employee-result');
-        if (!item) return;
+  // ---------- Registro manual ----------
+  const form = document.getElementById('attendance-form');
+  if (!form) return;
+  const search = document.getElementById('employee-search');
+  const results = document.getElementById('employee-results');
+  const rowsList = document.getElementById('attendance-rows-list');
+  const rowsInput = document.getElementById('attendance-rows');
+  const message = document.getElementById('attendance-message');
+  const submit = document.getElementById('submit-attendance');
+  const rowCount = document.getElementById('row-count');
+  const DRAFT_KEY = 'marcajix.manual-attendance-draft';
+  const selected = new Map();
+  const now = new Date();
+  const localValue = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const minDate = localValue(new Date(now.getTime() - {{ window_hours }} * 3600 * 1000));
+  const maxDate = localValue(now);
 
-        const id = String(item.dataset.id);
+  const setMessage = (text, tone) => {
+    message.textContent = text;
+    message.className = `text-sm ${tone === 'error' ? 'text-danger' : tone === 'success' ? 'text-success' : 'muted'}`;
+  };
+  const saveDraft = () => {
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify([...selected.values()])); } catch (error) { /* sin almacenamiento */ }
+  };
+  const restoreDraft = () => {
+    try {
+      (JSON.parse(sessionStorage.getItem(DRAFT_KEY) || '[]') || []).forEach((employee) => selected.set(String(employee.id), employee));
+    } catch (error) {
+      sessionStorage.removeItem(DRAFT_KEY);
+    }
+  };
 
-        if (selected.has(id)) {
-            selected.delete(id);
-        } else {
-            const smallParts = item.querySelector('small').textContent.split(' · ');
-            selected.set(id, {
-                id,
-                name: item.querySelector('strong').textContent,
-                hid_card_code: smallParts[0] || '',
-                department: smallParts[1] || '',
-                status: item.dataset.status || 'active',
-                initial: item.querySelector('.employee-avatar').textContent,
-                last_mark: item.dataset.lastMark || 'Sin marcajes',
-                mark_type: 'entry',
-                marked_at: maxDate,
-                error: null
-            });
-        }
+  const renderRows = () => {
+    rowCount.textContent = `${selected.size} seleccionado${selected.size === 1 ? '' : 's'}`;
+    submit.disabled = !selected.size;
+    rowsList.innerHTML = [...selected.values()].map((employee) => `
+      <div class="manual-row ${employee.error ? 'has-error' : ''}" data-id="${escapeHtml(employee.id)}">
+        <div class="cell-person">
+          <span class="avatar avatar-sm">${escapeHtml(employee.initial)}</span>
+          <div><strong>${escapeHtml(employee.name)}</strong><small>${escapeHtml(employee.department)} · Último: ${escapeHtml(employee.last_mark)}${employee.status === 'vacation' ? ' · De vacaciones' : ''}</small></div>
+        </div>
+        <select class="select row-mark-type" aria-label="Tipo para ${escapeHtml(employee.name)}">
+          <option value="entry" ${employee.mark_type === 'entry' ? 'selected' : ''}>Entrada</option>
+          <option value="exit" ${employee.mark_type === 'exit' ? 'selected' : ''}>Salida</option>
+        </select>
+        <input class="input row-datetime" type="datetime-local" min="${minDate}" max="${maxDate}" value="${escapeHtml(employee.marked_at)}" aria-label="Fecha y hora para ${escapeHtml(employee.name)}">
+        <button type="button" class="btn btn-ghost btn-icon btn-sm remove-row" aria-label="Quitar ${escapeHtml(employee.name)}"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+        ${employee.error ? `<p class="row-error">${escapeHtml(employee.error)}</p>` : ''}
+      </div>`).join('');
+  };
 
-        saveDraft();
-        renderRows();
-        search.value = '';
-        searchEmployees();
-        search.focus();
-    });
+  const renderResults = (employees) => {
+    results.innerHTML = employees.map((employee) => {
+      const isSelected = selected.has(String(employee.id));
+      return `<button type="button" class="result-item ${isSelected ? 'is-selected' : ''}" data-employee="${escapeHtml(JSON.stringify(employee))}">
+        <span class="avatar avatar-sm">${escapeHtml(employee.initial)}</span>
+        <span class="list-item-main"><strong>${escapeHtml(employee.name)}</strong><small>${escapeHtml(employee.hid_card_code)} · ${escapeHtml(employee.department)} · Último: ${escapeHtml(employee.last_mark)}</small></span>
+        <span class="badge ${isSelected ? 'badge-brand' : ''}">${isSelected ? 'Añadido' : 'Añadir'}</span>
+      </button>`;
+    }).join('') || '<div class="empty"><strong>Sin resultados</strong><span>Solo aparecen empleados activos o de vacaciones.</span></div>';
+  };
 
-    // Escuchar cambios de inputs dentro de la tabla para no perderlos al re-renderizar
-    rowsList.addEventListener('change', (event) => {
-        const row = event.target.closest('.manual-row');
-        if (!row) return;
+  let searchTimer;
+  const searchEmployees = async () => {
+    const query = search.value.trim();
+    if (!query) { results.innerHTML = ''; return; }
+    try {
+      const response = await fetch(`{% url 'attendance_employee_search' %}?q=${encodeURIComponent(query)}`);
+      renderResults((await response.json()).employees || []);
+    } catch (error) {
+      results.innerHTML = '<div class="empty"><strong>No se pudo consultar el servidor.</strong></div>';
+    }
+  };
+  search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(searchEmployees, 180); });
 
-        const emp = selected.get(row.dataset.id);
-        if (emp) {
-            if (event.target.classList.contains('row-mark-type')) {
-                emp.mark_type = event.target.value;
-            } else if (event.target.classList.contains('row-datetime')) {
-                emp.marked_at = event.target.value;
-            }
-            saveDraft();
-        }
-    });
-
-    // Eliminar fila individual
-    rowsList.addEventListener('click', (event) => {
-        const removeBtn = event.target.closest('.remove-row');
-        if (removeBtn) {
-            const row = removeBtn.closest('.manual-row');
-            selected.delete(row.dataset.id);
-            saveDraft();
-            renderRows();
-            searchEmployees();
-        }
-    });
-
-    // Limpiar campo de búsqueda
-    clearSearch.addEventListener('click', () => {
-        search.value = '';
-        clearSearch.hidden = true;
-        results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>';
-        search.focus();
-    });
-
-    // Enviar formulario mediante Fetch AJAX
-    form.addEventListener('submit', async (event) => {
-        event.preventDefault();
-        
-        // Bloquear interfaz durante procesamiento
-        submit.disabled = true;
-        setFeedback('Procesando marcajes...', 'is-loading');
-
-        // Recopilar filas del estado actual
-        const rows = [...selected.values()].map((emp) => ({
-            employee_id: emp.id,
-            mark_type: emp.mark_type,
-            marked_at: emp.marked_at
-        }));
-
-        rowsInput.value = JSON.stringify(rows);
-
-        try {
-            const response = await fetch(form.action, {
-                method: 'POST',
-                body: new FormData(form),
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            });
-
-            const data = await response.json();
-            const errorsMap = new Map((data.errors || []).map((err) => [String(err.employee_id), err.error]));
-
-            // Remover exitosos del Map
-            (data.successes || []).forEach((succ) => selected.delete(String(succ.employee_id)));
-
-            // Actualizar errores en el estado de los que quedaron pendientes
-            selected.forEach((emp, id) => {
-                emp.error = errorsMap.get(id) || null;
-            });
-
-            saveDraft();
-            renderRows();
-
-            const successCount = (data.successes || []).length;
-            const errorCount = (data.errors || []).length;
-            const warningMessages = (data.warnings || []).map((warning) => warning.message);
-            if ((data.errors || []).some((error) => error.code === 'blocked')) playAlertTone();
-
-            if (errorCount && successCount) {
-                setFeedback(`${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'} · ${errorCount} pendiente${errorCount === 1 ? '' : 's'} por corregir. Revisa las filas marcadas.`, 'is-warning');
-            } else if (errorCount) {
-                setFeedback(`No se guardó ningún marcaje. ${errorCount} fila${errorCount === 1 ? '' : 's'} necesita${errorCount === 1 ? '' : 'n'} corrección. Revisa el detalle en rojo.`, 'is-error');
-            } else {
-                setFeedback(warningMessages.length ? `${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'}. ${warningMessages.join(' ')}` : `${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'} correctamente.`, warningMessages.length ? 'is-warning' : 'is-success');
-            }
-
-        } catch (err) {
-            setFeedback('Ocurrió un error inesperado al procesar la solicitud.', 'is-error');
-        } finally {
-            submit.disabled = !selected.size;
-        }
-    });
-
-    restoreDraft();
+  results.addEventListener('click', (event) => {
+    const item = event.target.closest('.result-item');
+    if (!item) return;
+    const employee = JSON.parse(item.dataset.employee);
+    const id = String(employee.id);
+    if (selected.has(id)) {
+      selected.delete(id);
+    } else {
+      // Propone el movimiento contrario al último registrado.
+      selected.set(id, { ...employee, id, mark_type: employee.last_mark === 'Entrada' ? 'exit' : 'entry', marked_at: maxDate, error: null });
+    }
+    saveDraft();
     renderRows();
-});
+    searchEmployees();
+  });
+
+  rowsList.addEventListener('change', (event) => {
+    const row = event.target.closest('.manual-row');
+    const employee = row && selected.get(row.dataset.id);
+    if (!employee) return;
+    if (event.target.classList.contains('row-mark-type')) employee.mark_type = event.target.value;
+    if (event.target.classList.contains('row-datetime')) employee.marked_at = event.target.value;
+    saveDraft();
+  });
+  rowsList.addEventListener('click', (event) => {
+    const button = event.target.closest('.remove-row');
+    if (!button) return;
+    selected.delete(button.closest('.manual-row').dataset.id);
+    saveDraft();
+    renderRows();
+    searchEmployees();
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    setMessage('Registrando…');
+    rowsInput.value = JSON.stringify([...selected.values()].map((employee) => ({ employee_id: employee.id, mark_type: employee.mark_type, marked_at: employee.marked_at })));
+    try {
+      const response = await fetch(form.action, { method: 'POST', body: new FormData(form), headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      const data = await response.json();
+      const errors = new Map((data.errors || []).map((error) => [String(error.employee_id), error.error]));
+      (data.successes || []).forEach((success) => selected.delete(String(success.employee_id)));
+      selected.forEach((employee, id) => { employee.error = errors.get(id) || null; });
+      saveDraft();
+      renderRows();
+      const saved = (data.successes || []).length;
+      const pending = (data.errors || []).length;
+      if ((data.errors || []).some((error) => error.code === 'blocked')) alertTone();
+      (data.warnings || []).forEach((warning) => Marcajix.toast(warning.message, 'warning'));
+      if (pending) {
+        setMessage(`${saved} registrado${saved === 1 ? '' : 's'} · ${pending} con error. Revise las filas en rojo.`, 'error');
+      } else {
+        setMessage(`${saved} marcaje${saved === 1 ? '' : 's'} registrado${saved === 1 ? '' : 's'}.`, 'success');
+        Marcajix.toast(`${saved} marcaje${saved === 1 ? '' : 's'} registrado${saved === 1 ? '' : 's'}`, 'success');
+      }
+    } catch (error) {
+      setMessage('No se pudo contactar con el servidor. Inténtelo de nuevo.', 'error');
+    } finally {
+      submit.disabled = !selected.size;
+    }
+  });
+
+  restoreDraft();
+  renderRows();
+})();
 </script>
 {% endblock %}

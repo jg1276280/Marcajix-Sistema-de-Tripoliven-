@@ -1,124 +1,37 @@
 {% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Auditoría{% endblock %}
+{% block page_title %}Auditoría{% endblock %}
+{% block page_subtitle %}<p>Quién creó, modificó o eliminó información en el sistema</p>{% endblock %}
 
-{% block title %}Historial / Marcajix{% endblock %}
-{% block page_route %}2.02 / ADMINISTRACIÓN{% endblock %}
-{% block page_heading %}Historial de auditoría{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Consulta quién creó, modificó o eliminó registros en el sistema.</p>{% endblock %}
-
-{% block dashboard_content %}
-<div class="dashboard-content">
-
-    <form class="audit-filters" method="get" action="{% url 'audit_log' %}">
-        <div class="filter-group filter-search">
-            <label for="audit-query">Buscar actividad</label>
-            <input id="audit-query" type="search" name="q" value="{{ query }}" placeholder="Usuario, registro o detalle">
-        </div>
-        <div class="filter-group">
-            <label for="audit-from">Desde</label>
-            <input id="audit-from" type="date" name="from" value="{{ date_from }}">
-        </div>
-        <div class="filter-group">
-            <label for="audit-to">Hasta</label>
-            <input id="audit-to" type="date" name="to" value="{{ date_to }}">
-        </div>
-        <button class="button button-accent" type="submit">Actualizar</button>
-        <a class="button button-outline button-clear" href="{% url 'audit_log' %}" title="Limpiar filtros" aria-label="Limpiar filtros"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg><span class="button-text">Limpiar</span></a>
-    </form>
-
-    <!-- Panel de Tabla de Auditoría -->
-    <section class="data-panel audit-panel">
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th scope="col">Fecha / Hora</th>
-                        <th scope="col">Usuario</th>
-                        <th scope="col">Acción</th>
-                        <th scope="col">Registro afectado</th>
-                        <th scope="col">Detalle de cambio</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in logs %}
-                        <tr>
-                            <!-- Fecha y Hora Formateada -->
-                            <td>
-                                {{ log.action_time|date:"d/m/Y H:i:s" }}
-                            </td>
-
-                            <!-- Información del Usuario -->
-                            <td>
-                                <div class="user-cell">
-                                    <div class="avatar">
-                                        {{ log.user.username|first|upper }}
-                                    </div>
-                                    <div class="user-info">
-                                        <strong>
-                                            {{ log.user.get_full_name|default:log.user.username }}
-                                        </strong>
-                                        <small>@{{ log.user.username }}</small>
-                                    </div>
-                                </div>
-                            </td>
-
-                            <!-- Badge de Acción (LogEntry: 1=Adición, 2=Cambio, 3=Eliminación) -->
-                            <td>
-                                {% if log.action_flag == 1 %}
-                                    <span class="role-badge admin">Creado</span>
-                                {% elif log.action_flag == 2 %}
-                                    <span class="role-badge">Modificado</span>
-                                {% elif log.action_flag == 3 %}
-                                    <span class="role-badge deleted">Eliminado</span>
-                                {% else %}
-                                    <span class="role-badge">Otro</span>
-                                {% endif %}
-                            </td>
-
-                            <!-- Objeto Modificado -->
-                            <td>
-                                <code>{{ log.object_repr|default:"—" }}</code>
-                            </td>
-
-                            <!-- Mensaje o Detalle del Cambio -->
-                            <td>
-                                <span class="change-detail">
-                                    {{ log.change_message|default:"Sin detalle" }}
-                                </span>
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td class="empty-state" colspan="5">
-                                Todavía no hay eventos o cambios registrados en la auditoría.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Paginación (Si el objeto paginador existe en el contexto) -->
-        {% if logs.has_other_pages %}
-                    <nav class="pagination-container" aria-label="Navegación de historial">
-                <div class="pagination-info">
-                    Página {{ logs.number }} de {{ logs.paginator.num_pages }}
-                </div>
-                <div class="pagination-actions">
-                    {% if logs.has_previous %}
-                        <a class="button button-outline button-sm" href="?page={{ logs.previous_page_number }}&q={{ query }}&from={{ date_from }}&to={{ date_to }}">
-                            <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Anterior
-                        </a>
-                    {% endif %}
-                    
-                    {% if logs.has_next %}
-                        <a class="button button-outline button-sm" href="?page={{ logs.next_page_number }}&q={{ query }}&from={{ date_from }}&to={{ date_to }}">
-                            Siguiente <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                        </a>
-                    {% endif %}
-                </div>
-            </nav>
-        {% endif %}
-    </section>
-
+{% block page_content %}
+<div class="stack">
+  <form class="card card-body filters" method="get" action="{% url 'audit_log' %}">
+    <div class="field field-wide"><label for="audit-q">Buscar</label><div class="search">{% icon "search" %}<input id="audit-q" class="input" type="search" name="q" value="{{ query }}" placeholder="Usuario, registro o detalle"></div></div>
+    <div class="field"><label for="audit-from">Desde</label><input id="audit-from" class="input" type="date" name="from" value="{{ date_from }}"></div>
+    <div class="field"><label for="audit-to">Hasta</label><input id="audit-to" class="input" type="date" name="to" value="{{ date_to }}"></div>
+    <div class="row"><button class="btn btn-primary" type="submit">Filtrar</button><a class="btn btn-ghost" href="{% url 'audit_log' %}">Limpiar</a></div>
+  </form>
+  <section class="card card-flush">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Registro</th><th>Detalle</th></tr></thead>
+        <tbody>
+          {% for log in page_obj %}
+          <tr>
+            <td class="num nowrap">{{ log.action_time|date:"d/m/Y H:i:s" }}</td>
+            <td><div class="cell-person"><span class="avatar avatar-sm avatar-brand">{{ log.user.get_full_name|default:log.user.username|initials }}</span><div><strong>{{ log.user.get_full_name|default:log.user.username }}</strong><small>@{{ log.user.username }}</small></div></div></td>
+            <td>{% if log.action_flag == 1 %}<span class="badge badge-success">Creación</span>{% elif log.action_flag == 2 %}<span class="badge badge-info">Cambio</span>{% else %}<span class="badge badge-danger">Eliminación</span>{% endif %}</td>
+            <td><strong>{{ log.object_repr|default:"—" }}</strong><small class="muted block">{{ log.content_type.name|capfirst }}</small></td>
+            <td class="muted">{{ log.change_message|default:"Sin detalle" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5"><div class="empty">{% icon "list" %}<strong>Sin actividad</strong><span>No hay registros para los filtros seleccionados.</span></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% include "partials/pagination.html" %}
+  </section>
 </div>
 {% endblock %}

@@ -1,14 +1,35 @@
 {% extends "base.html" %}
-{% block title %}Acceder / Marcajix{% endblock %}
-{% block body_class %}auth-page{% endblock %}
-{% block content %}
-<main class="auth-shell">
-  <div class="auth-card">
-    <div class="brand-lockup"><div class="brand-symbol"><i></i><i></i><i></i><i></i></div><span>Marcajix</span></div>
-    <div class="auth-copy"><h1>Bienvenido de nuevo</h1><p>Inicia sesión con la cuenta que te asignó el área de Sistemas.</p></div>
-    {% if form.non_field_errors %}<div class="form-error">{{ form.non_field_errors }}</div>{% endif %}
-    <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label><div class="input-wrap">{{ field }}</div>{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="button button-accent" type="submit">Iniciar sesión</button></form>
-    <p class="form-foot">El acceso lo gestiona el área de Sistemas. Si necesitas una cuenta, solicítala allí.</p>
-  </div>
-</main>
+{% block title %}Iniciar sesión{% endblock %}
+{% block body %}
+<div class="auth">
+  <aside class="auth-aside">
+    <div class="brand"><span class="brand-mark">M</span><span class="brand-name"><strong>Marcajix</strong></span></div>
+    <div>
+      <h2>Control de acceso y asistencia de Tripoliven.</h2>
+      <p>Entradas y salidas en tiempo real, horas trabajadas y reportes, en un solo lugar.</p>
+    </div>
+    <p>Acceso exclusivo para personal autorizado.</p>
+  </aside>
+  <main class="auth-main">
+    <div class="auth-card">
+      <div>
+        <h1>Iniciar sesión</h1>
+        <p class="muted">Use la cuenta que le asignó el área de Sistemas.</p>
+      </div>
+      {% if form.non_field_errors %}<div class="alert alert-error">{{ form.non_field_errors.0 }}</div>{% endif %}
+      <form method="post" class="stack" novalidate>
+        {% csrf_token %}
+        {% for field in form %}
+        <div class="field {% if field.errors %}has-error{% endif %}">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {% for error in field.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+        </div>
+        {% endfor %}
+        <button class="btn btn-primary btn-lg btn-block" type="submit">Entrar</button>
+      </form>
+      <p class="muted text-sm">¿No tiene cuenta? Solicítela al área de Sistemas.</p>
+    </div>
+  </main>
+</div>
 {% endblock %}

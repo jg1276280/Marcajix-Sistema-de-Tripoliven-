@@ -13,7 +13,7 @@ from .forms import LoginForm
 from .models import UserSecurity, AttendanceLog, SecurityEvent
 from .services import AttendanceRegistrationError, register_attendance
 from core.test_utils import create_test_image as attendance_image, create_user_with_role
-from .permissions import HUMAN_RESOURCES, SECURITY, SYSTEMS
+from .permissions import HUMAN_RESOURCES, SECURITY
 
 
 @override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
@@ -225,7 +225,8 @@ class AttendanceTests(TestCase):
 
     def test_attendance_page_does_not_preload_unused_attendance_data(self):
         self.client.force_login(self.user)
-        with self.assertNumQueries(6):  # Incluye la consulta del rol del usuario (se cachea por petición).
+        # Sesión, usuario, rol, estado del lector y los últimos movimientos/alertas (con límite fijo).
+        with self.assertNumQueries(9):
             response = self.client.get("/dashboard/marcajes/")
         self.assertEqual(response.status_code, 200)
 
@@ -333,8 +334,8 @@ class DataIntegrityTests(TestCase):
         )
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["total_hours"], 0)
-        self.assertTrue(response.context["open_session"])
+        self.assertEqual(response.context["totals"].worked_hours, 0)
+        self.assertTrue(any(day.is_open for day in response.context["days"]))
 
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class AttendanceServiceTests(TestCase):

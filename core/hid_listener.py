@@ -1,13 +1,14 @@
 import logging
 import time
 
+from django.conf import settings
 from django.db import DatabaseError, close_old_connections
 from django.utils import timezone
 
 from employees.models import Employee
 
 from .models import AttendanceLog, HIDReaderConfig
-from .services import AttendanceRegistrationError, next_mark_type, record_unknown_card, register_attendance
+from .services import AttendanceRegistrationError, latest_mark, next_mark_type, record_unknown_card, register_attendance
 
 logger = logging.getLogger("marcajix.hid")
 
@@ -34,6 +35,11 @@ def process_card(card_code, source):
     if employee is None:
         record_unknown_card(card_code, source)
         logger.warning("Tarjeta no reconocida: %s", card_code)
+        return None
+    latest = latest_mark(employee)
+    if latest is not None and (timezone.now() - latest.marked_at).total_seconds() < settings.HID_REPEAT_SECONDS:
+        # Doble pasada: la persona acercó la tarjeta otra vez justo después de marcar.
+        logger.info("Lectura repetida ignorada: %s", employee.full_name)
         return None
     try:
         log = register_attendance(employee.pk, timezone.now(), next_mark_type(employee), source=source, capture_mode=AttendanceLog.HID)

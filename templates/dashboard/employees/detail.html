@@ -1,642 +1,117 @@
 {% extends "dashboard/base.html" %}
-
-{% block title %}{{ employee.full_name }} / Marcajix{% endblock %}
-{% block page_route %}1.02.3 / PERSONAL{% endblock %}
-{% block page_heading %}{{ employee.full_name }}{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Expediente del empleado</p>{% endblock %}
-
-{% block extra_css %}
-<style>
-.employee-photo-button {
-  display: block;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: zoom-in;
-}
-.employee-file-hero {
-  display: grid;
-  grid-template-columns: 156px minmax(0, 1fr);
-  align-items: center;
-  gap: 28px;
-  min-height: 200px;
-  padding: 32px;
-  background: var(--color-mist, #f8f9fa);
-  border-bottom: 1px solid var(--color-bone, #e8e8e8);
-}
-.employee-photo-button, .employee-photo-empty {
-  width: 156px;
-  height: 156px;
-  flex: 0 0 156px;
-  overflow: hidden;
-  border-radius: 9999px;
-  border: 1px solid var(--color-bone, #e8e8e8);
-}
-.employee-photo-button {
-  box-shadow: 0 4px 20px rgba(9, 12, 29, 0.06);
-}
-.employee-photo-button .employee-photo {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  display: block;
-}
-.employee-photo-empty {
-  display: grid;
-  place-items: center;
-  background: var(--color-brand-violet, #6647f0);
-  color: #ffffff;
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-size: 48px;
-  font-weight: 800;
-}
-.employee-hero-info {
-  min-width: 0;
-}
-.employee-role {
-  font-family: var(--font-inter, 'Inter', sans-serif);
-  font-size: 14px;
-  color: var(--color-slate, #646464);
-  margin: 6px 0 12px;
-}
-.employee-photo-button:focus {
-  outline: 3px solid var(--color-signal-blue, #0091ff);
-  outline-offset: 4px;
-}
-
-.attendance-status-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin: 24px 32px 0;
-  padding: 16px 20px;
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 12px;
-  background: #ffffff;
-}
-.attendance-status-copy {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-.attendance-status-dot {
-  width: 10px;
-  height: 10px;
-  flex: 0 0 10px;
-  border-radius: 50%;
-  background: var(--color-ash, #838383);
-}
-.attendance-status-panel.is-inside .attendance-status-dot {
-  background: #10b981;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.15);
-}
-.attendance-status-panel.is-outside .attendance-status-dot {
-  background: #f59e0b;
-  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
-}
-.attendance-status-title {
-  display: block;
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-onyx, #090c1d);
-}
-.attendance-status-meta {
-  display: block;
-  margin-top: 2px;
-  color: var(--color-slate, #646464);
-  font-family: var(--font-inter, 'Inter', sans-serif);
-  font-size: 12px;
-}
-.attendance-status-type {
-  color: var(--color-brand-violet, #6647f0);
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.employee-facts-heading {
-  margin: 28px 32px 12px;
-  color: var(--color-ash, #838383);
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-.employee-facts {
-  margin: 0 32px 28px !important;
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #ffffff;
-}
-.employee-facts > div {
-  min-height: 80px;
-  padding: 16px 20px !important;
-  background: #ffffff;
-}
-.employee-facts > div:nth-child(odd) {
-  background: var(--color-mist, #f8f9fa);
-}
-.employee-facts dt {
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace) !important;
-  font-size: 10px !important;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-ash, #838383) !important;
-  font-weight: 600;
-}
-.employee-facts dd {
-  margin-top: 6px !important;
-  font-family: var(--font-inter, 'Inter', sans-serif) !important;
-  font-size: 13px !important;
-  font-weight: 600;
-  color: var(--color-ink-black, #202020) !important;
-}
-.employee-facts dd small {
-  display: block;
-  margin-top: 4px;
-  color: var(--color-slate, #646464);
-  font-size: 11px;
-  font-weight: 400;
-}
-
-.employee-history-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 0 32px 28px;
-  padding: 16px 20px;
-  border-left: 3px solid var(--color-brand-violet, #6647f0);
-  background: #f3f0ff;
-  border-radius: 0 12px 12px 0;
-  color: var(--color-ink-black, #202020);
-  font-family: var(--font-inter, 'Inter', sans-serif);
-  font-size: 13px;
-}
-.employee-history-summary span {
-  color: var(--color-slate, #646464);
-}
-.employee-history-summary .button-link {
-  margin-left: auto;
-  white-space: nowrap;
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-weight: 700;
-  color: var(--color-brand-violet, #6647f0);
-  text-decoration: none;
-}
-
-.photo-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 30px;
-  background: rgba(9, 12, 29, 0.7);
-  backdrop-filter: blur(8px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s ease;
-}
-.photo-lightbox.is-open {
-  opacity: 1;
-  pointer-events: auto;
-}
-.photo-lightbox img {
-  max-width: min(92vw, 850px);
-  max-height: 84vh;
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(9, 12, 29, 0.3);
-}
-.photo-lightbox-close {
-  position: absolute;
-  top: 22px;
-  right: 26px;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  font-size: 24px;
-  cursor: pointer;
-}
-
-.attendance-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin: 24px 32px 0;
-  padding: 12px 16px;
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 12px;
-  background: #ffffff;
-}
-.attendance-periods {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-.attendance-periods a {
-  padding: 8px 14px;
-  border-radius: 9999px;
-  color: var(--color-slate, #646464);
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  transition: all 0.15s ease;
-}
-.attendance-periods a.is-active {
-  background: var(--color-ink-black, #202020);
-  color: #ffffff;
-}
-
-.attendance-range {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.attendance-range input {
-  width: 130px;
-  height: 36px;
-  border: 1px solid var(--color-cloud, #d4d4d4);
-  border-radius: 9px;
-  padding: 0 10px;
-  font: 12px var(--font-inter, 'Inter', sans-serif);
-}
-.attendance-range button {
-  height: 36px;
-  border: 0;
-  border-radius: 9999px;
-  background: var(--color-ink-black, #202020);
-  color: #ffffff;
-  padding: 0 16px;
-  font: 700 12px var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  cursor: pointer;
-}
-
-.attendance-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 32px 0;
-}
-.attendance-kpi {
-  min-height: 100px;
-  padding: 16px;
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 12px;
-  background: #ffffff;
-}
-.attendance-kpi-label {
-  display: block;
-  color: var(--color-ash, #838383);
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.attendance-kpi-value {
-  display: block;
-  margin-top: 10px;
-  color: var(--color-onyx, #090c1d);
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-size: 22px;
-  font-weight: 800;
-}
-.attendance-kpi-meta {
-  display: block;
-  margin-top: 4px;
-  color: var(--color-slate, #646464);
-  font-size: 11px;
-}
-
-.attendance-overview {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.7fr);
-  gap: 16px;
-  margin: 20px 32px 0;
-}
-.attendance-chart, .attendance-recent {
-  border: 1px solid var(--color-bone, #e8e8e8);
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 20px;
-}
-.attendance-chart h3, .attendance-recent h3 {
-  margin: 0;
-  color: var(--color-onyx, #090c1d);
-  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
-  font-size: 16px;
-  font-weight: 700;
-}
-.attendance-chart-subtitle {
-  margin: 4px 0 18px;
-  color: var(--color-slate, #646464);
-  font-size: 12px;
-}
-.attendance-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 130px;
-  padding-top: 10px;
-  border-bottom: 1px solid var(--color-bone, #e8e8e8);
-}
-.attendance-bar-item {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  height: 100%;
-  gap: 6px;
-}
-.attendance-bar {
-  width: min(28px, 70%);
-  height: calc(var(--bar-height) * 1%);
-  min-height: 4px;
-  border-radius: 6px 6px 0 0;
-  background: var(--color-brand-violet, #6647f0);
-}
-.attendance-bar-value, .attendance-bar-label {
-  color: var(--color-slate, #646464);
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
-  font-size: 9px;
-}
-.attendance-recent-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 16px;
-}
-.attendance-recent-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  font-family: var(--font-inter, 'Inter', sans-serif);
-}
-.attendance-badge {
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.attendance-badge.on-time {
-  background: #ecfdf5;
-  color: #047857;
-}
-.attendance-badge.late {
-  background: #fffbeb;
-  color: #b45309;
-}
-
-.attendance-balance {
-  margin: 18px 32px 0;
-  padding: 14px 18px;
-  border-radius: 12px;
-  background: var(--color-mist, #f8f9fa);
-  border: 1px solid var(--color-bone, #e8e8e8);
-  color: var(--color-slate, #646464);
-  font-size: 13px;
-}
-.attendance-balance strong {
-  color: var(--color-ink-black, #202020);
-}
-
-@media(max-width: 700px) {
-  .employee-file-hero {
-    grid-template-columns: 96px minmax(0, 1fr);
-    gap: 16px;
-    min-height: 132px;
-    padding: 20px;
-  }
-  .employee-photo-button, .employee-photo-empty {
-    width: 96px;
-    height: 96px;
-    flex-basis: 96px;
-  }
-  .attendance-status-panel, .employee-facts-heading, .employee-facts, .employee-history-summary, .attendance-toolbar, .attendance-kpis, .attendance-overview, .attendance-balance {
-    margin-left: 16px !important;
-    margin-right: 16px !important;
-  }
-  .attendance-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .attendance-overview {
-    grid-template-columns: 1fr;
-  }
-}
-</style>
+{% load ui %}
+{% block title %}{{ employee.full_name }}{% endblock %}
+{% block page_title %}{{ employee.full_name }}{% endblock %}
+{% block page_subtitle %}<p>{{ employee.position.name }} · {{ employee.department.name }} · {{ employee.management.name }}</p>{% endblock %}
+{% block page_actions %}
+  {% if access.manage_employees %}
+  <a class="btn btn-secondary" href="{% url 'employees:edit' employee.pk %}">{% icon "edit" %}<span class="btn-label">Editar</span></a>
+  {% if employee.status == "active" or employee.status == "inactive" %}
+  <form method="post" action="{% url 'employees:toggle_status' employee.pk %}" data-confirm="¿Cambiar el estado de {{ employee.full_name }}?">{% csrf_token %}<button class="btn btn-ghost" type="submit">{% if employee.status == "active" %}Desactivar{% else %}Activar{% endif %}</button></form>
+  {% endif %}
+  <form method="post" action="{% url 'employees:delete' employee.pk %}" data-confirm="¿Eliminar a {{ employee.full_name }}? Solo es posible si no tiene marcajes.">{% csrf_token %}<button class="btn btn-ghost btn-icon" type="submit" title="Eliminar" aria-label="Eliminar">{% icon "trash" %}</button></form>
+  {% endif %}
 {% endblock %}
 
-{% block topbar_actions %}
-    {% if access.manage_employees %}
-        <a class="topbar-shortcut button button-outline" href="{% url 'employees:edit' employee.pk %}">
-            <svg class="button-icon" aria-hidden="true"><use href="#icon-edit"/></svg> Editar ficha
-        </a>
-        <form method="post" action="{% url 'employees:delete' employee.pk %}" class="inline-form">
-            {% csrf_token %}
-            <button class="topbar-shortcut danger button button-danger" 
-                    type="submit" 
-                    {% if employee.has_important_history %}disabled title="No se puede eliminar un empleado con marcajes o historial de seguridad"{% endif %}
-                    onclick="return confirm('¿Está seguro de que desea eliminar permanentemente el expediente de {{ employee.full_name|escapejs }}?');">
-                {% if employee.has_important_history %}Eliminación bloqueada{% else %}Eliminar ficha{% endif %}
-            </button>
-        </form>
-    {% endif %}
-{% endblock %}
+{% block page_content %}
+<div class="stack">
+  <section class="card">
+    <div class="profile-header">
+      <span class="avatar avatar-lg">{% if employee.photo %}<img src="{{ employee.photo.url }}" alt="Foto de {{ employee.full_name }}">{% else %}{{ employee.full_name|initials }}{% endif %}</span>
+      <div class="info">
+        <div class="row">
+          {% include "partials/employee_status.html" %}
+          {% if is_inside %}<span class="badge badge-success">{% icon "door" "sm" %}Dentro desde {{ latest.marked_at|date:"H:i" }}</span>{% elif latest %}<span class="badge">Fuera · salió {{ latest.marked_at|date:"d/m H:i" }}</span>{% else %}<span class="badge">Sin movimientos</span>{% endif %}
+        </div>
+        <p class="muted">C.I. {{ employee.identification }} · Tarjeta <span class="mono">{{ employee.hid_card_code|default:"sin asignar" }}</span></p>
+      </div>
+      <form class="row" method="get">
+        <div class="segmented" role="group" aria-label="Periodo">
+          {% for key, label in periods.items %}{% if key != "range" %}<a class="{% if period == key %}active{% endif %}" href="?period={{ key }}">{{ label }}</a>{% endif %}{% endfor %}
+        </div>
+        <input type="hidden" name="period" value="range">
+        <input class="input" type="date" name="from" value="{{ start|date:'Y-m-d' }}" aria-label="Desde">
+        <input class="input" type="date" name="to" value="{{ end|date:'Y-m-d' }}" aria-label="Hasta">
+        <button class="btn btn-secondary" type="submit">Ver</button>
+      </form>
+    </div>
+  </section>
 
-{% block dashboard_content %}
-<div class="dashboard-content employee-detail-page">
+  <section class="kpis">
+    <div class="kpi"><span class="kpi-label">{% icon "clock" "sm" %}Horas trabajadas</span><span class="kpi-value">{{ totals.worked_hours|hm }}<small>h</small></span><span class="kpi-meta">{{ start|date:"d/m" }} – {{ end|date:"d/m" }}</span></div>
+    <div class="kpi kpi-accent"><span class="kpi-label">{% icon "plus" "sm" %}Horas extra</span><span class="kpi-value">{{ totals.overtime_hours|hm }}<small>h</small></span><span class="kpi-meta">Sobre {{ workday_hours|floatformat:"-1" }} h por día</span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "calendar" "sm" %}Días con asistencia</span><span class="kpi-value">{{ totals.days_worked }}</span><span class="kpi-meta">Incidencias: {{ totals.incidents }}</span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "entry" "sm" %}Llegada · salida promedio</span><span class="kpi-value">{{ totals.average_arrival|default:"—" }}</span><span class="kpi-meta">Salida: {{ totals.average_departure|default:"—" }}</span></div>
+  </section>
 
-    <!-- Enlace de Retorno -->
-    <a class="button button-outline button-sm" href="{% url 'employees:list' %}" style="margin-bottom: 20px;">
-        <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Volver al directorio
-    </a>
-
-    <!-- Expediente del Empleado -->
-    <article class="employee-file">
-        
-        <!-- Hero del Empleado -->
-        <header class="employee-file-hero">
-            {% if employee.photo %}
-                <button type="button" class="employee-photo-button" data-photo-open aria-label="Ampliar fotografía de {{ employee.full_name }}">
-                    <img src="{{ employee.photo.url }}" alt="Fotografía de {{ employee.full_name }}" class="employee-photo">
-                </button>
-            {% else %}
-                <div class="employee-photo-empty" aria-hidden="true">
-                    {{ employee.full_name|first|upper }}
-                </div>
-            {% endif %}
-
-            <div class="employee-hero-info">
-                <span class="section-number">1.02.3 / EXPEDIENTE</span>
-                <h2 style="font-family:var(--font-plus-jakarta-sans); font-size:32px; font-weight:800; letter-spacing:-0.035em; color:var(--color-onyx); margin:6px 0 2px;">{{ employee.full_name }}</h2>
-                <p class="employee-role">
-                    {{ employee.position|default:"Sin cargo" }} · {{ employee.department|default:"Sin departamento" }}
-                </p>
-                <span class="status status-{{ employee.status }}">
-                    <i class="status-dot"></i>
-                    {{ employee.get_status_display }}
-                </span>
+  <div class="grid-main">
+    <div class="stack">
+      <section class="card">
+        <header class="card-header"><div><h2>Horas por día</h2><p>Últimos {{ chart|length }} días del periodo</p></div></header>
+        <div class="card-body">
+          <div class="bars">
+            {% for item in chart %}
+            <div class="bar" title="{{ item.day|date:'l d/m' }}: {{ item.hours|hm }} h">
+              <span class="bar-value">{% if item.hours %}{{ item.hours|hm }}{% endif %}</span>
+              <span class="bar-track"><span class="bar-fill {% if not item.hours %}is-zero{% endif %}" style="height: {{ item.percent }}%"></span></span>
+              <span class="bar-label">{{ item.day|date:"d/m" }}</span>
             </div>
-        </header>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
 
-        <section class="attendance-status-panel is-{{ attendance_status }}" aria-label="Estado del marcaje">
-            <div class="attendance-status-copy">
-                <span class="attendance-status-dot" aria-hidden="true"></span>
-                <div>
-                    <strong class="attendance-status-title">Estado operativo: {{ attendance_status_label }}</strong>
-                    {% if latest_attendance %}
-                        <span class="attendance-status-meta">Último movimiento: {{ latest_attendance.marked_at|date:"d/m/Y H:i" }}</span>
-                    {% else %}
-                        <span class="attendance-status-meta">Todavía no tiene movimientos registrados.</span>
-                    {% endif %}
-                </div>
-            </div>
-            {% if latest_attendance %}<span class="attendance-status-type">{{ latest_attendance.get_mark_type_display }}</span>{% endif %}
-        </section>
+      <section class="card card-flush">
+        <header class="card-header"><div><h2>Jornadas</h2><p>Primera entrada, última salida y horas de cada día</p></div></header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Fecha</th><th>Entrada</th><th>Salida</th><th class="right">Horas</th><th class="right">Extra</th><th>Incidencias</th></tr></thead>
+            <tbody>
+              {% for day in days %}
+              <tr>
+                <td class="nowrap num">{{ day.day|date:"D d/m" }}</td>
+                <td class="num">{{ day.first_entry|date:"H:i"|default:"—" }}</td>
+                <td class="num">{% if day.is_open %}<span class="badge badge-success">Dentro</span>{% else %}{{ day.last_exit|date:"H:i"|default:"—" }}{% endif %}</td>
+                <td class="right num"><strong>{{ day.worked_hours|hm }}</strong></td>
+                <td class="right num">{% if day.overtime_hours %}<span class="badge badge-brand">+{{ day.overtime_hours|hm }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                <td>{% for incident in day.incidents %}<span class="badge badge-warning">{{ incident.label }} {{ incident.at|date:"H:i" }}</span> {% empty %}<span class="muted">—</span>{% endfor %}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="6"><div class="empty">{% icon "calendar" %}<strong>Sin jornadas en este periodo</strong></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-        <form class="attendance-toolbar" method="get">
-            <div class="attendance-periods" aria-label="Período de métricas">
-                <a class="{% if period == 'today' %}is-active{% endif %}" href="?period=today">Hoy</a>
-                <a class="{% if period == 'week' %}is-active{% endif %}" href="?period=week">Esta semana</a>
-                <a class="{% if period == 'month' %}is-active{% endif %}" href="?period=month">Este mes</a>
-            </div>
-            <div class="attendance-range">
-                <input type="hidden" name="period" value="range">
-                <input type="date" name="from" value="{{ date_from }}" aria-label="Desde">
-                <input type="date" name="to" value="{{ date_to }}" aria-label="Hasta">
-                <button type="submit">Aplicar</button>
-            </div>
-        </form>
-
-        <section class="attendance-kpis" aria-label="Métricas de asistencia">
-            <article class="attendance-kpi"><span class="attendance-kpi-label">Promedio entrada</span><strong class="attendance-kpi-value">{{ average_times.entry|default:"—" }}</strong><span class="attendance-kpi-meta">Hora media de llegada</span></article>
-            <article class="attendance-kpi"><span class="attendance-kpi-label">Promedio salida</span><strong class="attendance-kpi-value">{{ average_times.exit|default:"—" }}</strong><span class="attendance-kpi-meta">Hora media de salida</span></article>
-            <article class="attendance-kpi"><span class="attendance-kpi-label">Horas trabajadas</span><strong class="attendance-kpi-value">{{ total_hours|floatformat:2 }} h</strong><span class="attendance-kpi-meta">{{ period_start|date:"d/m" }} - {{ period_end|date:"d/m" }}</span></article>
-            <article class="attendance-kpi"><span class="attendance-kpi-label">Sesiones completas</span><strong class="attendance-kpi-value">{{ complete_sessions }}</strong><span class="attendance-kpi-meta">Intervalos Entrada → Salida válidos</span></article>
-        </section>
-
-        <div class="attendance-balance">Balance contra la jornada de referencia de <strong>{{ workday_hours|floatformat:"-2" }} h por sesión</strong>: <strong>{% if balance_hours >= 0 %}+{% endif %}{{ balance_hours|floatformat:2 }} h</strong>{% if open_session %} · Hay una Entrada sin Salida y no se suma al total.{% endif %}{% if incongruences %} · {{ incongruences|length }} evento{{ incongruences|length|pluralize }} incongruente{{ incongruences|length|pluralize }}.{% endif %}</div>
-
-        <section class="attendance-overview">
-            <article class="attendance-chart">
-                <h3>Horas trabajadas por día</h3>
-                <p class="attendance-chart-subtitle">Pares completos de Entrada y Salida del período</p>
-                <div class="attendance-bars">
-                    {% for item in chart_days %}<div class="attendance-bar-item"><span class="attendance-bar-value">{{ item.hours }}h</span><div class="attendance-bar" style="--bar-height:{{ item.height }}"></div><span class="attendance-bar-label">{{ item.label }}</span></div>{% endfor %}
-                </div>
-            </article>
-            <article class="attendance-recent">
-                <h3>Últimas llegadas</h3>
-                <div class="attendance-recent-list">{% for item in recent_statuses %}<div class="attendance-recent-item"><span>{{ item.date }} · {{ item.time }}</span><span class="attendance-badge {{ item.tone }}">{{ item.label }}</span></div>{% empty %}<span class="attendance-kpi-meta">Sin entradas en este período</span>{% endfor %}</div>
-            </article>
-        </section>
-
-        <!-- Detalle de Datos -->
-        <h3 class="employee-facts-heading">Datos del empleado</h3>
-        <dl class="employee-facts">
-            <div>
-                <dt>Identificación</dt>
-                <dd><strong>{{ employee.identification|default:"—" }}</strong></dd>
-            </div>
-            
-            <div>
-                <dt>Departamento</dt>
-                <dd><strong>{{ employee.department|default:"—" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Gerencia</dt>
-                <dd><strong>{{ employee.management|default:"—" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Código de tarjeta</dt>
-                <dd><strong>{{ employee.hid_card_code|default:"Sin tarjeta registrada" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Fecha de ingreso</dt>
-                <dd><strong>{{ employee.hire_date|date:"d/m/Y"|default:"No registrada" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Contacto de emergencia</dt>
-                <dd><strong>{{ employee.emergency_contact_name|default:"No registrado" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Teléfono de emergencia</dt>
-                <dd><strong>{{ employee.emergency_phone|default:"No registrado" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Fecha de creación</dt>
-                <dd><strong>{{ employee.created_at|date:"d/m/Y H:i" }}</strong></dd>
-            </div>
-
-            <div>
-                <dt>Última actualización</dt>
-                <dd>
-                    <time datetime="{{ employee.updated_at|date:'Y-m-d H:i' }}">
-                        {{ employee.updated_at|date:"d/m/Y H:i"|default:"—" }}
-                    </time>
-                </dd>
-            </div>
-
+    <div class="stack">
+      <section class="card">
+        <header class="card-header"><h2>Datos</h2></header>
+        <dl class="facts">
+          <div class="fact"><dt>Gerencia</dt><dd>{{ employee.management.name }}</dd></div>
+          <div class="fact"><dt>Departamento</dt><dd>{{ employee.department.name }}</dd></div>
+          <div class="fact"><dt>Cargo</dt><dd>{{ employee.position.name }}</dd></div>
+          <div class="fact"><dt>Fecha de ingreso</dt><dd>{{ employee.hire_date|date:"d/m/Y" }}</dd></div>
+          <div class="fact"><dt>Nacimiento</dt><dd>{{ employee.birthday|date:"d/m/Y"|default:"—" }}</dd></div>
+          <div class="fact"><dt>Contacto de emergencia</dt><dd>{{ employee.emergency_contact_name|default:"—" }}{% if employee.emergency_phone %} · {{ employee.emergency_phone }}{% endif %}</dd></div>
         </dl>
+      </section>
 
-        {% if latest_attendance %}
-            <div class="employee-history-summary">
-                <strong>Último movimiento registrado</strong>
-                <span>{{ latest_attendance.get_mark_type_display }} · {{ latest_attendance.marked_at|date:"d/m/Y H:i" }} · {{ latest_attendance.source }}</span>
-                <a class="button button-outline button-sm" href="{% url 'attendance_history' %}?employee={{ employee.pk }}">Ver historial completo <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>
-            </div>
-        {% endif %}
-
-    </article>
-
+      <section class="card">
+        <header class="card-header"><div><h2>Últimos movimientos</h2></div><a class="btn btn-ghost btn-sm" href="{% url 'attendance_history' %}?employee={{ employee.pk }}">Ver todos</a></header>
+        <div class="list">
+          {% for mark in recent_marks %}
+          <div class="list-item">
+            <div class="list-item-main"><strong>{% if mark.mark_type == "entry" %}Entrada{% else %}Salida{% endif %}</strong><small>{% if mark.capture_mode == "hid" %}Lector de tarjetas{% else %}Manual{% if mark.registered_by %} · @{{ mark.registered_by.username }}{% endif %}{% endif %}</small></div>
+            <div class="list-item-side num">{{ mark.marked_at|date:"d/m/Y" }}<span>{{ mark.marked_at|date:"H:i:s" }}</span></div>
+          </div>
+          {% empty %}
+          <div class="empty"><strong>Sin movimientos</strong></div>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </div>
 </div>
-
-{% if employee.photo %}
-<div class="photo-lightbox" data-photo-lightbox role="dialog" aria-modal="true" aria-label="Fotografía ampliada">
-    <button type="button" class="photo-lightbox-close" data-photo-close aria-label="Cerrar fotografía">×</button>
-    <img src="{{ employee.photo.url }}" alt="Fotografía ampliada de {{ employee.full_name }}">
-</div>
-{% endif %}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const lightbox = document.querySelector('[data-photo-lightbox]');
-    const openButton = document.querySelector('[data-photo-open]');
-    const closeButton = document.querySelector('[data-photo-close]');
-    if (!lightbox || !openButton || !closeButton) return;
-    document.body.appendChild(lightbox);
-    const close = () => { lightbox.classList.remove('is-open'); document.body.style.overflow = ''; };
-    openButton.addEventListener('click', () => { lightbox.classList.add('is-open'); document.body.style.overflow = 'hidden'; closeButton.focus(); });
-    closeButton.addEventListener('click', close);
-    lightbox.addEventListener('click', (event) => { if (event.target === lightbox) close(); });
-    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
-});
-</script>
 {% endblock %}

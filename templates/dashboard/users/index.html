@@ -1,199 +1,61 @@
 {% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Usuarios{% endblock %}
+{% block page_title %}Usuarios{% endblock %}
+{% block page_subtitle %}<p>Cuentas con acceso al sistema y su rol</p>{% endblock %}
+{% block page_actions %}<button type="button" class="btn btn-primary" data-open-modal="create-user-modal">{% icon "plus" %}<span class="btn-label">Nuevo usuario</span></button>{% endblock %}
 
-{% block title %}Usuarios / Marcajix{% endblock %}
-{% block page_route %}2.01 / ADMINISTRACIÓN{% endblock %}
-{% block page_heading %}Gestión de usuarios{% endblock %}
-{% block page_subtitle %}<p class="page-subtitle">Administra accesos, roles y estado de las cuentas de usuario.</p>{% endblock %}
-
-{% block topbar_actions %}
-    <a class="topbar-shortcut button button-accent" href="{% url 'user_create' %}">
-        <svg class="button-icon" aria-hidden="true"><use href="#icon-plus"/></svg> Nuevo usuario
-    </a>
-{% endblock %}
-
-{% block dashboard_content %}
-<div class="dashboard-content">
-
-    <!-- Barra de Herramientas y Búsqueda -->
-    <div class="toolbar">
-        <form class="search-form" method="get" action="{% url 'user_list' %}">
-            <span class="search-icon" aria-hidden="true"></span>
-            <input type="search" name="q" value="{{ query }}" placeholder="Buscar por nombre, usuario o correo..." aria-label="Buscar usuarios">
-            <button class="button button-outline" type="submit"><svg class="button-icon" aria-hidden="true"><use href="#icon-eye"/></svg> Buscar</button>
-            {% if query %}
-                <a href="{% url 'user_list' %}" class="button button-clear icon-button" title="Limpiar búsqueda" aria-label="Limpiar búsqueda"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></a>
-            {% endif %}
-        </form>
-
-        <span class="result-count">
-            {% if page_obj %}
-                {{ page_obj.paginator.count }} resultado{{ page_obj.paginator.count|pluralize:"s" }}
-            {% else %}
-                {{ users|length }} resultado{{ users|length|pluralize:"s" }}
-            {% endif %}
-        </span>
+{% block page_content %}
+<div class="stack">
+  <form class="search" method="get" action="{% url 'user_list' %}" role="search">
+    {% icon "search" %}<input class="input" type="search" name="q" value="{{ query }}" placeholder="Nombre, usuario o correo" aria-label="Buscar usuarios">
+  </form>
+  <section class="card card-flush">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead>
+        <tbody>
+          {% for item in users %}
+          <tr {% if not item.is_active %}class="is-muted"{% endif %}>
+            <td><div class="cell-person"><span class="avatar avatar-sm avatar-brand">{{ item.get_full_name|default:item.username|initials }}</span><div><strong>{{ item.get_full_name|default:item.username }}</strong><small>@{{ item.username }}{% if item.email %} · {{ item.email }}{% endif %}</small></div></div></td>
+            <td>{% if item.is_superuser %}<span class="badge badge-brand">Superusuario</span>{% else %}{% for group in item.groups.all %}<span class="badge {% if group.name == 'Sistemas' %}badge-brand{% elif group.name == 'Seguridad' %}badge-info{% else %}badge-success{% endif %}">{{ group.name }}</span>{% empty %}<span class="badge badge-warning">Sin rol</span>{% endfor %}{% endif %}</td>
+            <td>{% if item.is_active %}<span class="badge badge-success"><i class="dot"></i>Activa</span>{% else %}<span class="badge"><i class="dot"></i>Inactiva</span>{% endif %}</td>
+            <td class="num muted">{{ item.last_login|date:"d/m/Y H:i"|default:"Nunca" }}</td>
+            <td><div class="actions">
+              {% if not item.is_superuser or user.is_superuser %}
+              <a class="btn btn-ghost btn-icon btn-sm" href="{% url 'user_edit' item.pk %}" title="Editar" aria-label="Editar a {{ item.username }}">{% icon "edit" "sm" %}</a>
+              {% if item.pk != user.pk %}
+              <form method="post" action="{% url 'user_delete' item.pk %}" data-confirm="¿Eliminar la cuenta @{{ item.username }}? Si tiene actividad, desactívela en su lugar.">{% csrf_token %}<button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Eliminar" aria-label="Eliminar a {{ item.username }}">{% icon "trash" "sm" %}</button></form>
+              {% endif %}
+              {% endif %}
+            </div></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5"><div class="empty">{% icon "shield" %}<strong>Sin usuarios</strong></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-
-    <!-- Panel de Tabla de Usuarios -->
-    <section class="data-panel">
-        <div class="table-scroll">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th scope="col">Usuario</th>
-                        <th scope="col">Contacto</th>
-                        <th scope="col">Rol</th>
-                        <th scope="col">Estado</th>
-                        <th scope="col" class="actions-column">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in users %}
-                        <tr>
-                            <!-- Información de Usuario -->
-                            <td>
-                                <div class="user-cell">
-                                    <div class="avatar">
-                                        {{ item.username|first|upper }}
-                                    </div>
-                                    <div class="user-info">
-                                        <strong>{{ item.get_full_name|default:item.username }}</strong>
-                                        <small>@{{ item.username }}</small>
-                                    </div>
-                                </div>
-                            </td>
-
-                            <!-- Correo de Contacto -->
-                            <td>
-                                {{ item.email|default:"Sin correo registrado" }}
-                            </td>
-
-                            <!-- Rol -->
-                            <td>
-                                {% if item.is_superuser %}
-                                    <span class="role-badge admin">Superusuario</span>
-                                {% else %}
-                                    {% for group in item.groups.all %}<span class="role-badge{% if group.name == 'Sistemas' %} admin{% endif %}">{{ group.name }}</span>{% empty %}<span class="role-badge">Sin rol</span>{% endfor %}
-                                {% endif %}
-                            </td>
-
-                            <!-- Estado (Activo / Inactivo) -->
-                            <td>
-                                {% if item.is_active %}
-                                    <span class="status active">
-                                        <i class="status-dot"></i> Activo
-                                    </span>
-                                {% else %}
-                                    <span class="status inactive">
-                                        <i class="status-dot"></i> Inactivo
-                                    </span>
-                                {% endif %}
-                            </td>
-
-                            <!-- Acciones de Fila -->
-                            <td class="actions">
-                                <a class="icon-action" href="{% url 'user_edit' item.pk %}" aria-label="Editar usuario {{ item.username }}" title="Editar">
-                                    <svg aria-hidden="true"><use href="#icon-edit"/></svg>
-                                </a>
-                                
-                                <form method="post" action="{% url 'user_delete' item.pk %}" class="inline-form">
-                                    {% csrf_token %}
-                                    <button type="submit" 
-                                            class="icon-action danger" 
-                                            aria-label="Eliminar usuario {{ item.username }}" title="{% if item.pk == user.pk %}No puedes eliminar tu propia cuenta{% else %}Eliminar{% endif %}"
-                                            onclick="return confirm('¿Está seguro de que desea eliminar al usuario {{ item.username }}?')" 
-                                            {% if item.pk == user.pk %}disabled{% endif %}>
-                                        <svg aria-hidden="true"><use href="#icon-trash"/></svg>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td class="empty-state" colspan="5">
-                                No encontramos usuarios que coincidan con los criterios de búsqueda.
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Paginación Global -->
-        {% if page_obj.has_other_pages %}
-            <nav class="pagination-container" aria-label="Navegación de usuarios">
-                <div class="pagination-info">
-                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                </div>
-                <div class="pagination-actions">
-                    {% if page_obj.has_previous %}
-                        <a class="button button-outline button-sm" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}">
-                            <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Anterior
-                        </a>
-                    {% endif %}
-                    
-                    {% if page_obj.has_next %}
-                        <a class="button button-outline button-sm" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}">
-                            Siguiente <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                        </a>
-                    {% endif %}
-                </div>
-            </nav>
-        {% endif %}
-    </section>
-
+  </section>
 </div>
 
-<!-- Modal: Crear Usuario -->
-{% if create_form %}
-    <div class="modal-layer {% if open_modal == 'create' %}is-open{% endif %}" id="create-user-modal" role="dialog" aria-modal="true" aria-labelledby="create-user-title">
-        <div class="modal-card">
-            <header class="modal-header">
-                <div>
-                    <span class="section-number">2.01.1 / NUEVO REGISTRO</span>
-                    <h2 id="create-user-title">Crear usuario</h2>
-                    <p>Configura los datos y permisos de la nueva cuenta.</p>
-                </div>
-                <a class="modal-close" href="{% url 'user_list' %}" aria-label="Cerrar ventana modal"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></a>
-            </header>
+<dialog class="modal" id="create-user-modal" aria-labelledby="create-user-title" {% if open_modal == "create" %}data-autoshow{% endif %}>
+  <form method="post" action="{% url 'user_create' %}" novalidate>
+    {% csrf_token %}
+    <header class="modal-header"><h2 id="create-user-title">Nuevo usuario</h2><button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Cerrar">{% icon "x" %}</button></header>
+    <div class="modal-body">{% include "dashboard/users/form_fields.html" with form=create_form %}</div>
+    <footer class="modal-footer"><button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button><button class="btn btn-primary" type="submit">Crear usuario</button></footer>
+  </form>
+</dialog>
 
-            <form class="admin-form modal-form" method="post" action="{% url 'user_create' %}" novalidate>
-                {% csrf_token %}
-                {% include "dashboard/users/form_fields.html" with form=create_form %}
-                
-                <footer class="form-actions">
-                    <a class="button button-secondary" href="{% url 'user_list' %}">Cancelar</a>
-                    <button class="button button-accent button-submit" type="submit">Crear usuario</button>
-                </footer>
-            </form>
-        </div>
-    </div>
-{% endif %}
-
-<!-- Modal: Editar Usuario -->
 {% if edit_form %}
-    <div class="modal-layer is-open" id="edit-user-modal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title">
-        <div class="modal-card">
-            <header class="modal-header">
-                <div>
-                    <span class="section-number">2.01.2 / EDITAR REGISTRO</span>
-                    <h2 id="edit-user-title">Editar {{ editing_user.username }}</h2>
-                    <p>Actualiza los datos y permisos de la cuenta.</p>
-                </div>
-                <a class="modal-close" href="{% url 'user_list' %}" aria-label="Cerrar ventana modal"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></a>
-            </header>
-
-            <form class="admin-form modal-form" method="post" action="{% url 'user_edit' editing_user.pk %}" novalidate>
-                {% csrf_token %}
-                {% include "dashboard/users/form_fields.html" with form=edit_form %}
-                
-                <footer class="form-actions">
-                    <a class="button button-secondary" href="{% url 'user_list' %}">Cancelar</a>
-                    <button class="button button-accent button-submit" type="submit">Guardar cambios</button>
-                </footer>
-            </form>
-        </div>
-    </div>
+<dialog class="modal" id="edit-user-modal" aria-labelledby="edit-user-title" data-autoshow>
+  <form method="post" action="{% url 'user_edit' editing_user.pk %}" novalidate>
+    {% csrf_token %}
+    <header class="modal-header"><h2 id="edit-user-title">Editar @{{ editing_user.username }}</h2><a class="btn btn-ghost btn-icon" href="{% url 'user_list' %}" aria-label="Cerrar">{% icon "x" %}</a></header>
+    <div class="modal-body">{% include "dashboard/users/form_fields.html" with form=edit_form %}</div>
+    <footer class="modal-footer"><a class="btn btn-secondary" href="{% url 'user_list' %}">Cancelar</a><button class="btn btn-primary" type="submit">Guardar cambios</button></footer>
+  </form>
+</dialog>
 {% endif %}
-
 {% endblock %}

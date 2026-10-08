@@ -1,0 +1,13 @@
+{% load ui %}<div class="tree-row">
+  <form method="post" class="inline-edit">
+    {% csrf_token %}<input type="hidden" name="action" value="{{ level }}_update"><input type="hidden" name="pk" value="{{ item.pk }}">
+    <input class="input" type="text" name="name" value="{{ item.name }}" aria-label="Nombre de {{ item.name }}" required>
+    <button class="btn btn-ghost btn-icon btn-sm" type="submit" title="Guardar nombre" aria-label="Guardar nombre de {{ item.name }}">{% icon "check" "sm" %}</button>
+  </form>
+  <span class="badge">{{ count_label }}</span>
+  <form method="post" data-confirm="¿Eliminar «{{ item.name }}»?">
+    {% csrf_token %}<input type="hidden" name="action" value="{{ level }}_delete"><input type="hidden" name="pk" value="{{ item.pk }}">
+    <button class="btn btn-ghost btn-icon btn-sm" type="submit" {% if has_children %}disabled title="Tiene elementos vinculados"{% else %}title="Eliminar"{% endif %} aria-label="Eliminar {{ item.name }}">{% icon "trash" "sm" %}</button>
+  </form>
+  {% if editing.level == level and editing.pk == item.pk %}<span class="field-error">{{ structure_edit_form.name.errors|striptags }}</span>{% endif %}
+</div>

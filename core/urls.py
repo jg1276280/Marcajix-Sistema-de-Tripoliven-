@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import live, views
+from . import live, reports, views
 from .forms import LoginForm
 
 urlpatterns = [
@@ -25,4 +25,6 @@ urlpatterns = [
     path("dashboard/marcajes/registrar/", views.attendance_register, name="attendance_register"),
     path("dashboard/marcajes/empleados/", views.attendance_employee_search, name="attendance_employee_search"),
     path("dashboard/marcajes/historial/", views.attendance_history, name="attendance_history"),
+    path("dashboard/reportes/", reports.attendance_report, name="attendance_report"),
+    path("dashboard/reportes/exportar/", reports.attendance_report_export, name="attendance_report_export"),
 ]

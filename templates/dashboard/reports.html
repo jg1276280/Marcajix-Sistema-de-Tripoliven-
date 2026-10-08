@@ -1,0 +1,123 @@
+{% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Reportes{% endblock %}
+{% block page_title %}Reportes de asistencia{% endblock %}
+{% block page_subtitle %}<p>{{ start|date:"d/m/Y" }}{% if start != end %} – {{ end|date:"d/m/Y" }}{% endif %} · jornada de referencia {{ workday_hours|default:"" }}</p>{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-secondary" href="{% url 'attendance_report_export' %}?{{ querystring }}">{% icon "download" %}<span class="btn-label">Exportar a Excel</span></a>
+  <button type="button" class="btn btn-ghost" onclick="window.print()">{% icon "printer" %}<span class="btn-label">Imprimir</span></button>
+{% endblock %}
+
+{% block page_content %}
+<div class="stack">
+  <form class="card card-body filters" method="get">
+    <input type="hidden" name="view" value="{{ view }}">
+    <input type="hidden" name="period" id="report-period" value="{{ period }}">
+    <div class="field">
+      <span class="field-label">Periodo</span>
+      <div class="segmented" role="group" aria-label="Periodo">
+        {% for key, label in periods.items %}{% if key != "range" %}
+        <a href="?{% if filters_querystring %}{{ filters_querystring }}&amp;{% endif %}period={{ key }}" class="{% if period == key %}active{% endif %}">{{ label }}</a>
+        {% endif %}{% endfor %}
+      </div>
+    </div>
+    <div class="field">
+      <label for="report-from">Desde</label>
+      <input id="report-from" class="input" type="date" name="from" value="{{ start|date:'Y-m-d' }}">
+    </div>
+    <div class="field">
+      <label for="report-to">Hasta</label>
+      <input id="report-to" class="input" type="date" name="to" value="{{ end|date:'Y-m-d' }}">
+    </div>
+    <div class="field">
+      <label for="report-management">Gerencia</label>
+      <select id="report-management" class="select" name="management">
+        <option value="">Todas</option>
+        {% for item in managements %}<option value="{{ item.pk }}" {% if filters.management == item.pk|stringformat:"s" %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="report-department">Departamento</label>
+      <select id="report-department" class="select" name="department">
+        <option value="">Todos</option>
+        {% for item in departments %}<option value="{{ item.pk }}" {% if filters.department == item.pk|stringformat:"s" %}selected{% endif %}>{{ item.name }} · {{ item.management.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field field-wide">
+      <label for="report-q">Empleado</label>
+      <div class="search">{% icon "search" %}<input id="report-q" class="input" type="search" name="q" value="{{ filters.q }}" placeholder="Nombre, cédula o tarjeta"></div>
+    </div>
+    <div class="row">
+      <button class="btn btn-primary" type="submit">Aplicar</button>
+      <a class="btn btn-ghost" href="{% url 'attendance_report' %}">Limpiar</a>
+    </div>
+  </form>
+
+  <section class="kpis">
+    <div class="kpi"><span class="kpi-label">{% icon "users" "sm" %}Personas con asistencia</span><span class="kpi-value">{{ overview.people }}</span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "clock" "sm" %}Horas trabajadas</span><span class="kpi-value">{{ overview.worked_hours|hm }}<small>h</small></span></div>
+    <div class="kpi kpi-accent"><span class="kpi-label">{% icon "plus" "sm" %}Horas extra</span><span class="kpi-value">{{ overview.overtime_hours|hm }}<small>h</small></span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "alert" "sm" %}Incidencias</span><span class="kpi-value">{{ overview.incidents }}</span><span class="kpi-meta">Marcajes sin pareja o sesiones excesivas</span></div>
+  </section>
+
+  <section class="card card-flush">
+    <header class="card-header">
+      <div><h2>{% if view == "daily" %}Detalle por día{% else %}Resumen por empleado{% endif %}</h2><p>{% if view == "daily" %}Primera entrada, última salida y horas de cada jornada{% else %}Totales del periodo seleccionado{% endif %}</p></div>
+      <div class="segmented no-print" role="group" aria-label="Vista">
+        <a class="{% if view == 'summary' %}active{% endif %}" href="?{{ querystring }}&amp;view=summary">Por empleado</a>
+        <a class="{% if view == 'daily' %}active{% endif %}" href="?{{ querystring }}&amp;view=daily">Por día</a>
+      </div>
+    </header>
+    <div class="table-wrap">
+      {% if view == "daily" %}
+      <table class="table">
+        <thead><tr><th>Fecha</th><th>Empleado</th><th>Entrada</th><th>Salida</th><th class="right">Horas</th><th class="right">Extra</th><th>Incidencias</th></tr></thead>
+        <tbody>
+          {% for row in page_obj %}
+          <tr>
+            <td class="nowrap num">{{ row.day|date:"D d/m" }}</td>
+            <td><div class="cell-person"><span class="avatar avatar-sm">{{ row.employee.full_name|initials }}</span><div><strong>{{ row.employee.full_name }}</strong><small>{{ row.employee.department.name }}</small></div></div></td>
+            <td class="num">{{ row.first_entry|date:"H:i"|default:"—" }}</td>
+            <td class="num">{% if row.is_open %}<span class="badge badge-success">Dentro</span>{% else %}{{ row.last_exit|date:"H:i"|default:"—" }}{% endif %}</td>
+            <td class="right num"><strong>{{ row.worked_hours|hm }}</strong></td>
+            <td class="right num">{% if row.overtime_hours %}<span class="badge badge-brand">+{{ row.overtime_hours|hm }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{% for incident in row.incidents %}<span class="badge badge-warning" title="{{ incident.at|date:'d/m H:i' }}">{{ incident.label }} {{ incident.at|date:"H:i" }}</span> {% empty %}<span class="muted">—</span>{% endfor %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7"><div class="empty">{% icon "calendar" %}<strong>Sin jornadas</strong><span>No hay marcajes en el periodo y filtros seleccionados.</span></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <table class="table">
+        <thead><tr><th>Empleado</th><th class="right">Días</th><th class="right">Horas</th><th class="right">Extra</th><th>Llegada prom.</th><th>Salida prom.</th><th class="right">Incidencias</th><th></th></tr></thead>
+        <tbody>
+          {% for row in page_obj %}
+          <tr {% if not row.days_worked and not row.incidents %}class="is-muted"{% endif %}>
+            <td><div class="cell-person"><span class="avatar avatar-sm">{{ row.employee.full_name|initials }}</span><div><strong>{{ row.employee.full_name }}</strong><small>{{ row.employee.department.name }} · {{ row.employee.position.name }}</small></div></div></td>
+            <td class="right num">{{ row.days_worked }}</td>
+            <td class="right num"><strong>{{ row.worked_hours|hm }}</strong></td>
+            <td class="right num">{% if row.overtime_hours %}<span class="badge badge-brand">+{{ row.overtime_hours|hm }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="num">{{ row.average_arrival|default:"—" }}</td>
+            <td class="num">{{ row.average_departure|default:"—" }}</td>
+            <td class="right">{% if row.incidents %}<span class="badge badge-warning">{{ row.incidents }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+            <td class="right no-print"><a class="btn btn-ghost btn-sm" href="{% url 'employees:detail' row.employee.pk %}?period={{ period }}&amp;from={{ start|date:'Y-m-d' }}&amp;to={{ end|date:'Y-m-d' }}">Ver ficha</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8"><div class="empty">{% icon "users" %}<strong>Sin empleados</strong><span>Ningún empleado coincide con los filtros.</span></div></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    {% include "partials/pagination.html" %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Al tocar las fechas, el periodo pasa a ser un rango personalizado.
+  document.querySelectorAll('#report-from, #report-to').forEach((input) => input.addEventListener('change', () => { document.getElementById('report-period').value = 'range'; }));
+</script>
+{% endblock %}

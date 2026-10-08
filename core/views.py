@@ -1,5 +1,4 @@
 from django.contrib import messages
-from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
@@ -10,7 +9,6 @@ from django.contrib.auth import update_session_auth_hash
 from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from datetime import datetime, time, timedelta
@@ -18,11 +16,13 @@ import json
 import logging
 from employees.models import Department, Employee
 
-from .forms import HIDReaderConfigForm, LoginForm, ProfileForm, ProfilePasswordForm, UserAccountForm
-from .permissions import CONFIGURE_DEVICES, MANAGE_USERS, MONITOR_DOOR, REGISTER_ATTENDANCE, VIEW_ATTENDANCE_HISTORY, VIEW_AUDIT, capability_required, has_capability
+from .forms import HIDReaderConfigForm, ProfileForm, ProfilePasswordForm, UserAccountForm
+from .permissions import CONFIGURE_DEVICES, MANAGE_USERS, MONITOR_DOOR, REGISTER_ATTENDANCE, VIEW_ANALYTICS, VIEW_ATTENDANCE_HISTORY, VIEW_AUDIT, capability_required, has_capability
 from .security import reset_failed_logins
 from .models import AttendanceLog, HIDReaderConfig, SecurityEvent
-from .services import AttendanceRegistrationError, register_attendance
+from .attendance import average_clock, daily_summaries, people_inside
+from .live import reader_status, recent_events
+from .services import MANUAL_ATTENDANCE_WINDOW, AttendanceRegistrationError, register_attendance
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +118,7 @@ def _reader_read_test(config, timeout_seconds=10):
     """
     import time
     try:
-        from serial import Serial, SerialException
+        from serial import Serial
     except ImportError:
         return {"level": "error", "code": "dependency", "message": "pyserial no está instalado.", "card_code": None}
     try:
@@ -185,19 +185,53 @@ def home(request):
 
 @login_required
 def dashboard(request):
-    context = {"section": "Resumen", "active_page": "overview", "is_admin": has_capability(request.user, MANAGE_USERS)}
-    if context["is_admin"]:
-        today = timezone.localdate()
-        today_start = timezone.make_aware(datetime.combine(today, time.min))
-        tomorrow_start = today_start + timedelta(days=1)
-        user_counts = User.objects.aggregate(active=Count("pk", filter=Q(is_active=True)), total=Count("pk"))
-        employee_counts = Employee.objects.aggregate(active=Count("pk", filter=Q(status=Employee.ACTIVE)), total=Count("pk"))
+    """Resumen según el rol: garita en vivo (Seguridad), tiempos de la semana (RRHH) y sistema (Sistemas)."""
+    user = request.user
+    today = timezone.localdate()
+    today_start = timezone.make_aware(datetime.combine(today, time.min))
+    tomorrow_start = today_start + timedelta(days=1)
+    context = {"active_page": "overview", "today": today, "today_label": today.strftime("%d/%m/%Y")}
+
+    if has_capability(user, MONITOR_DOOR, VIEW_ANALYTICS):
+        inside = people_inside()
+        context.update(inside=inside, stale_count=sum(1 for person in inside if person.stale))
+
+    if has_capability(user, MONITOR_DOOR):
+        counts = AttendanceLog.objects.filter(marked_at__gte=today_start, marked_at__lt=tomorrow_start).aggregate(
+            entries=Count("pk", filter=Q(mark_type=AttendanceLog.ENTRY)), exits=Count("pk", filter=Q(mark_type=AttendanceLog.EXIT))
+        )
         context.update(
-            active_user_count=user_counts["active"],
-            user_count=user_counts["total"],
-            active_employees_count=employee_counts["active"],
-            employee_count=employee_counts["total"],
-            today_logs_count=AttendanceLog.objects.filter(marked_at__gte=today_start, marked_at__lt=tomorrow_start).count(),
+            door=True,
+            today_entries=counts["entries"],
+            today_exits=counts["exits"],
+            today_alerts=SecurityEvent.objects.filter(occurred_at__gte=today_start, occurred_at__lt=tomorrow_start).count(),
+            reader=reader_status(),
+            recent=recent_events(8),
+        )
+
+    if has_capability(user, VIEW_ANALYTICS):
+        week_start = today - timedelta(days=today.weekday())
+        summaries = daily_summaries(week_start, today)
+        hours_by_day = {week_start + timedelta(days=offset): 0.0 for offset in range((today - week_start).days + 1)}
+        for summary in summaries:
+            hours_by_day[summary.day] += summary.worked_seconds / 3600
+        peak = max(hours_by_day.values(), default=0) or 1
+        today_arrivals = [timezone.localtime(item.first_entry) for item in summaries if item.day == today and item.first_entry]
+        context.update(
+            analytics=True,
+            week_hours=round(sum(hours_by_day.values()), 1),
+            week_overtime=round(sum(item.overtime_hours for item in summaries), 1),
+            week_incidents=sum(len(item.incidents) for item in summaries),
+            today_average_arrival=average_clock(today_arrivals),
+            week_chart=[{"day": day, "hours": round(hours, 1), "percent": round(hours / peak * 100)} for day, hours in hours_by_day.items()],
+        )
+
+    if has_capability(user, MANAGE_USERS):
+        context.update(
+            admin=True,
+            active_users=User.objects.filter(is_active=True).count(),
+            active_employees=Employee.objects.filter(status=Employee.ACTIVE).count(),
+            total_employees=Employee.objects.count(),
         )
     return render(request, "dashboard/index.html", context)
 
@@ -210,7 +244,7 @@ def device_config_view(request):
         form.save()
         messages.success(request, "La configuración del lector se actualizó correctamente.")
         return redirect("device_config")
-    return render(request, "dashboard/devices/config.html", {"form": form, "active_page": "device_config", "reader_status": _reader_port_status(config)})
+    return render(request, "dashboard/devices/config.html", {"form": form, "config": config, "active_page": "device_config", "reader_status": _reader_port_status(config), "listener": reader_status()})
 
 
 @capability_required(CONFIGURE_DEVICES)
@@ -349,12 +383,21 @@ def audit_log(request):
     if query:
         logs = logs.filter(Q(object_repr__icontains=query) | Q(change_message__icontains=query) | Q(user__username__icontains=query))
     page = Paginator(logs, 25).get_page(request.GET.get("page"))
-    return render(request, "dashboard/audit.html", {"logs": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "active_page": "audit"})
+    querystring = request.GET.copy()
+    querystring.pop("page", None)
+    return render(request, "dashboard/audit.html", {"querystring": querystring.urlencode(), "logs": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "active_page": "audit"})
 
 
 @capability_required(MONITOR_DOOR)
 def attendance_monitor(request):
-    return render(request, "dashboard/attendance.html", {"active_page": "attendance"})
+    today = timezone.localdate()
+    return render(request, "dashboard/attendance.html", {
+        "active_page": "attendance",
+        "reader": reader_status(),
+        "recent": recent_events(12),
+        "today_label": today.strftime("%d/%m/%Y"),
+        "window_hours": int(MANUAL_ATTENDANCE_WINDOW.total_seconds() // 3600),
+    })
 
 
 @capability_required(REGISTER_ATTENDANCE)
@@ -458,4 +501,6 @@ def attendance_history(request):
     page = Paginator(events, 25).get_page(request.GET.get("page"))
     departments = Department.objects.values_list("name", flat=True).distinct().order_by("name")
     selected_employees = Employee.objects.with_structure().filter(pk__in=employee_ids).order_by("full_name")
-    return render(request, "dashboard/attendance_history.html", {"events": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "department": department, "employee_ids": employee_ids, "selected_employees": selected_employees, "departments": departments, "active_page": "attendance_history"})
+    querystring = request.GET.copy()
+    querystring.pop("page", None)
+    return render(request, "dashboard/attendance_history.html", {"querystring": querystring.urlencode(), "events": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "department": department, "employee_ids": employee_ids, "selected_employees": selected_employees, "departments": departments, "active_page": "attendance_history"})

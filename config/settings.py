@@ -64,6 +64,10 @@ TIME_ZONE = os.getenv("TIME_ZONE", "America/Caracas")
 
 # Jornada de referencia (horas) para calcular el balance y las horas extra de cada empleado.
 ATTENDANCE_WORKDAY_HOURS = float(os.getenv("ATTENDANCE_WORKDAY_HOURS", "8"))
+# Una entrada sin salida durante más de estas horas se considera olvido de marcaje (no suma horas).
+ATTENDANCE_MAX_SESSION_HOURS = float(os.getenv("ATTENDANCE_MAX_SESSION_HOURS", "16"))
+# Una tarjeta leída de nuevo antes de estos segundos desde su último marcaje se ignora (doble pasada).
+HID_REPEAT_SECONDS = int(os.getenv("HID_REPEAT_SECONDS", "60"))
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"

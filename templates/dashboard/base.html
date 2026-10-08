@@ -1,207 +1,75 @@
 {% extends "base.html" %}
+{% load ui %}
+{% block body %}
+<a class="skip-link" href="#contenido">Saltar al contenido</a>
+<div class="app">
+  <aside class="sidebar" aria-label="Navegación principal">
+    <a class="brand" href="{% url 'dashboard' %}">
+      <span class="brand-mark">M</span>
+      <span class="brand-name"><strong>Marcajix</strong><small>Tripoliven</small></span>
+    </a>
 
-{% block body_class %}dashboard-page{% endblock %}
-
-{% block content %}
-<svg class="icon-sprite" aria-hidden="true" width="0" height="0">
-    <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
-    <symbol id="icon-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0M16 5a3 3 0 0 1 0 6M17 14a5 5 0 0 1 4 6"/></symbol>
-    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
-    <symbol id="icon-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2"/></symbol>
-    <symbol id="icon-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
-    <symbol id="icon-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
-    <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></symbol>
-    <symbol id="icon-edit" viewBox="0 0 24 24"><path d="m4 20 4-.8L19 8a2 2 0 0 0-3-3L5 16zM14 6l4 4"/></symbol>
-    <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
-    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M5 3h12l2 2v16H5zM8 3v6h8V3M8 21v-7h8v7"/></symbol>
-    <symbol id="icon-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
-    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol>
-    <symbol id="icon-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol>
-    <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
-    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
-    <symbol id="icon-device" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h3"/></symbol>
-    <symbol id="icon-kiosk" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h8M10 17h4"/></symbol>
-</svg>
-<a class="skip-link" href="#main-content">Saltar al contenido principal</a>
-<div class="app-layout">
-
-    <!-- Navegación Lateral (Escritorio) -->
-    <aside class="sidebar">
-        <a class="brand-lockup" href="{% url 'dashboard' %}" aria-label="Ir al resumen">
-            <div class="brand-symbol">
-                <i></i><i></i><i></i><i></i>
-            </div>
-            <span>Marcajix</span>
-        </a>
-
-        <!-- Sección 01: Operación (según el rol) -->
-        <div class="side-label">1. / WORKSPACE</div>
-        <nav class="module-nav" aria-label="Workspace">
-            <a class="nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"/></svg><span class="nav-label">Resumen</span>
-            </a>
-            {% if access.view_employees %}
-            <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-users"/></svg><span class="nav-label">Personal</span>
-            </a>
-            {% endif %}
-            {% if access.monitor_door %}
-            <a class="nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-check"/></svg><span class="nav-label">Marcajes</span>
-            </a>
-            {% endif %}
-            {% if access.view_attendance_history %}
-            <a class="nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span class="nav-label">Historial de marcajes</span>
-            </a>
-            {% endif %}
-        </nav>
-
-        <!-- Sección 02: Administración (Sistemas) -->
-        {% if access.manage_users or access.view_audit or access.manage_structure or access.configure_devices %}
-            <div class="side-label">2. / ADMINISTRACIÓN</div>
-            <nav aria-label="Administración">
-                {% if access.manage_users %}
-                <a class="nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span class="nav-label">Usuarios</span>
-                </a>
-                {% endif %}
-                {% if access.view_audit %}
-                <a class="nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span class="nav-label">Historial de auditoría</span>
-                </a>
-                {% endif %}
-                {% if access.manage_structure %}
-                <a class="nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-grid"/></svg><span class="nav-label">Estructura</span>
-                </a>
-                {% endif %}
-                {% if access.configure_devices %}
-                <a class="nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">
-                    <svg class="nav-icon" aria-hidden="true"><use href="#icon-device"/></svg><span class="nav-label">Dispositivos / Garita</span>
-                </a>
-                {% endif %}
-            </nav>
-        {% endif %}
-
-        <div class="sidebar-spacer"></div>
-
-        <!-- Sección 03: Cuenta -->
-        <div class="side-label">3. / CUENTA</div>
-        <nav aria-label="Cuenta de usuario">
-            <a class="nav-link {% if active_page == 'profile' %}active{% endif %}" href="{% url 'profile' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span class="nav-label">Mi perfil</span>
-            </a>
-        </nav>
-    </aside>
-
-    <!-- Navegación Inferior (Dispositivos Móviles) -->
-    <nav class="mobile-nav" aria-label="Navegación móvil">
-        <a class="mobile-nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">
-            <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"/></svg><span>Inicio</span>
-        </a>
-        {% if access.view_employees %}
-        <a class="mobile-nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">
-            <svg class="nav-icon" aria-hidden="true"><use href="#icon-users"/></svg><span>Personal</span>
-        </a>
-        {% endif %}
-        {% if access.monitor_door %}
-        <a class="mobile-nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">
-            <svg class="nav-icon" aria-hidden="true"><use href="#icon-check"/></svg><span>Marcajes</span>
-        </a>
-        {% endif %}
-        {% if access.view_attendance_history %}
-        <a class="mobile-nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">
-            <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span>Historial</span>
-        </a>
-        {% endif %}
-        <a class="mobile-nav-link {% if active_page == 'profile' %}active{% endif %}" href="{% url 'profile' %}">
-            <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span>Perfil</span>
-        </a>
-        {% if access.manage_users %}
-            <a class="mobile-nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span>Usuarios</span>
-            </a>
-        {% endif %}
-        {% if access.view_audit %}
-            <a class="mobile-nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span>Auditoría</span>
-            </a>
-        {% endif %}
-        {% if access.manage_structure %}
-            <a class="mobile-nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>Estructura</span>
-            </a>
-        {% endif %}
-        {% if access.configure_devices %}
-            <a class="mobile-nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">
-                <svg class="nav-icon" aria-hidden="true"><use href="#icon-device"/></svg><span>Dispositivos</span>
-            </a>
-        {% endif %}
+    <nav aria-label="Operación">
+      <a class="nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">{% icon "home" %}Resumen</a>
+      {% if access.monitor_door %}
+      <a class="nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">{% icon "door" %}Garita</a>
+      {% endif %}
+      {% if access.view_employees %}
+      <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">{% icon "users" %}Personal</a>
+      {% endif %}
+      {% if access.view_attendance_history %}
+      <a class="nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">{% icon "clock" %}Movimientos</a>
+      {% endif %}
+      {% if access.view_analytics %}
+      <a class="nav-link {% if active_page == 'reports' %}active{% endif %}" href="{% url 'attendance_report' %}">{% icon "chart" %}Reportes</a>
+      {% endif %}
     </nav>
 
-    <!-- Área de Contenido Principal -->
-    <main class="dashboard-main" id="main-content" tabindex="-1">
-        
-        <!-- Barra Superior (Topbar) -->
-        <header class="topbar">
-            <div class="page-header">
-                <div class="page-route">{% block page_route %}WORKSPACE{% endblock %}</div>
-                <h1>{% block page_heading %}Marcajix{% endblock %}</h1>
-                {% block page_subtitle %}{% endblock %}
-            </div>
-            <!-- Acciones y Menú de Perfil Dropdown -->
-            <div class="topbar-actions">
-                {% if access.monitor_door %}
-                <a class="topbar-shortcut button button-outline kiosk-shortcut" href="{% url 'kiosk_display' %}" aria-label="Abrir pantalla de garita">
-                    <svg class="button-icon" aria-hidden="true"><use href="#icon-kiosk"/></svg><span>Pantalla de garita</span>
-                </a>
-                {% endif %}
-                {% block topbar_actions %}{% endblock %}
+    {% if access.manage_users or access.view_audit or access.manage_structure or access.configure_devices %}
+    <div class="nav-label">Administración</div>
+    <nav aria-label="Administración">
+      {% if access.manage_users %}<a class="nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">{% icon "shield" %}Usuarios</a>{% endif %}
+      {% if access.manage_structure %}<a class="nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">{% icon "tree" %}Estructura</a>{% endif %}
+      {% if access.configure_devices %}<a class="nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">{% icon "chip" %}Lector HID</a>{% endif %}
+      {% if access.view_audit %}<a class="nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">{% icon "list" %}Auditoría</a>{% endif %}
+    </nav>
+    {% endif %}
 
-                <details class="profile-menu">
-                    <summary class="profile-chip">
-                        <div class="avatar">
-                            {{ user.username|first|upper }}
-                        </div>
-                        <div>
-                            <strong>{{ user.username }}</strong>
-                            <small>{{ user_role|default:"Sin rol" }}</small>
-                        </div>
-                        <svg class="profile-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
-                    </summary>
+    <div class="sidebar-footer">
+      <details class="dropdown">
+        <summary class="user-chip">
+          <span class="avatar avatar-sm avatar-brand">{{ user.get_full_name|default:user.username|initials }}</span>
+          <span class="user-chip-info"><strong>{{ user.get_full_name|default:user.username }}</strong><small>{{ user_role|default:"Sin rol" }}</small></span>
+        </summary>
+        <div class="dropdown-menu">
+          <a href="{% url 'profile' %}">{% icon "user" "sm" %}Mi perfil</a>
+          {% if access.monitor_door %}<a href="{% url 'kiosk_display' %}" target="_blank" rel="noopener">{% icon "monitor" "sm" %}Pantalla de garita</a>{% endif %}
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">{% icon "logout" "sm" %}Cerrar sesión</button></form>
+        </div>
+      </details>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop"></div>
 
-                    <div class="profile-dropdown">
-                        <a href="{% url 'profile' %}">
-                            Mi perfil <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                        </a>
-                        <form method="post" action="{% url 'logout' %}">
-                            {% csrf_token %}
-                            <button type="submit">
-                                Cerrar sesión <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
-                            </button>
-                        </form>
-                    </div>
-                </details>
-            </div>
-        </header>
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="btn btn-ghost btn-icon menu-toggle" aria-label="Abrir menú">{% icon "menu" %}</button>
+      <div class="topbar-title">
+        <h1>{% block page_title %}{% endblock %}</h1>
+        {% block page_subtitle %}{% endblock %}
+      </div>
+      <div class="topbar-actions">{% block page_actions %}{% endblock %}</div>
+    </header>
 
-        <!-- Pila de Mensajes Globales de Django (Banners de Éxito / Alerta) -->
-        {% if messages %}
-            <div class="message-stack">
-                {% for message in messages %}
-                    <div class="message message-{{ message.tags }}">
-                        {{ message }}
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
-
-        <!-- Bloque Principal Inyectable -->
-        {% block dashboard_content %}{% endblock %}
-
+    <main class="content" id="contenido" tabindex="-1">
+      {% if messages %}
+      <div class="messages">
+        {% for message in messages %}<div class="alert alert-{{ message.tags }}">{{ message }}</div>{% endfor %}
+      </div>
+      {% endif %}
+      {% block page_content %}{% endblock %}
     </main>
-
+  </div>
 </div>
+{% block scripts %}{% endblock %}
 {% endblock %}

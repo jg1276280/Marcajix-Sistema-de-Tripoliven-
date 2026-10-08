@@ -1,0 +1,11 @@
+{% load ui %}<div class="list-item">
+  <span class="avatar">{% if event.photo %}<img src="{{ event.photo }}" alt="" loading="lazy">{% else %}{{ event.name|initials }}{% endif %}</span>
+  <div class="list-item-main">
+    <strong>{{ event.name|default:"Tarjeta no registrada" }}</strong>
+    <small>{% if event.kind == "unknown_card" %}Código {{ event.card_code }}{% else %}{{ event.department }}{% if event.kind == "denied" %} · {{ event.message }}{% endif %}{% endif %}</small>
+  </div>
+  <div class="list-item-side">
+    {% if event.kind == "entry" %}<span class="badge badge-success">Entrada</span>{% elif event.kind == "exit" %}<span class="badge badge-info">Salida</span>{% elif event.kind == "denied" %}<span class="badge badge-danger">Denegado</span>{% else %}<span class="badge badge-warning">Tarjeta desconocida</span>{% endif %}
+    <span class="num">{% if event.date != today_label %}{{ event.date|slice:":5" }} · {% endif %}{{ event.time }}</span>
+  </div>
+</div>

@@ -1,4 +1,3 @@
-from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
@@ -172,8 +171,8 @@ class EmployeeTests(TestCase):
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["attendance_status"], "inside")
-        self.assertEqual(response.context["latest_attendance"].mark_type, AttendanceLog.ENTRY)
+        self.assertTrue(response.context["is_inside"])
+        self.assertEqual(response.context["latest"].mark_type, AttendanceLog.ENTRY)
 
     def test_employee_detail_reports_outside_after_latest_exit(self):
         from django.utils import timezone
@@ -187,8 +186,8 @@ class EmployeeTests(TestCase):
 
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
 
-        self.assertEqual(response.context["attendance_status"], "outside")
-        self.assertEqual(response.context["latest_attendance"].mark_type, AttendanceLog.EXIT)
+        self.assertFalse(response.context["is_inside"])
+        self.assertEqual(response.context["latest"].mark_type, AttendanceLog.EXIT)
 
     def test_employee_detail_calculates_average_entry_and_exit_times(self):
         from datetime import datetime
@@ -201,9 +200,11 @@ class EmployeeTests(TestCase):
         AttendanceLog.objects.create(employee=employee, marked_at=timezone.make_aware(datetime(2026, 9, 22, 18, 0)), mark_type=AttendanceLog.EXIT)
         self.client.force_login(self.admin)
 
-        response = self.client.get(reverse("employees:detail", args=[employee.pk]))
+        response = self.client.get(reverse("employees:detail", args=[employee.pk]), {"period": "range", "from": "2026-09-22", "to": "2026-09-22"})
 
-        self.assertEqual(response.context["average_times"], {"entry": "08:00", "exit": "17:00"})
+        # La primera entrada del día (8:00) y la salida que cierra la sesión (17:00); la de 18:00 es una salida sin entrada.
+        self.assertEqual(response.context["totals"].average_arrival, "08:00")
+        self.assertEqual(response.context["totals"].average_departure, "17:00")
 
     def test_employee_detail_calculates_period_metrics(self):
         from datetime import datetime, timedelta
@@ -219,10 +220,10 @@ class EmployeeTests(TestCase):
 
         response = self.client.get(reverse("employees:detail", args=[employee.pk]), {"period": "week"})
 
-        self.assertEqual(response.context["total_hours"], 8.0)
-        self.assertEqual(response.context["session_quality"], 100)
-        self.assertEqual(response.context["balance_hours"], 0.0)
-        self.assertIn(8.0, [item["hours"] for item in response.context["chart_days"]])
+        self.assertEqual(response.context["totals"].worked_hours, 8.0)
+        self.assertEqual(response.context["totals"].incidents, 0)
+        self.assertEqual(response.context["totals"].overtime_hours, 0.0)
+        self.assertIn(8.0, [item["hours"] for item in response.context["chart"]])
 
     def test_employee_detail_does_not_overlap_repeated_entries(self):
         from datetime import datetime, timedelta
@@ -236,9 +237,10 @@ class EmployeeTests(TestCase):
 
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
 
-        self.assertEqual(response.context["total_hours"], 4.0)
-        self.assertEqual(response.context["complete_sessions"], 1)
-        self.assertEqual(len(response.context["incongruences"]), 2)
+        # Entre dos entradas falta una salida: la primera queda como incidencia y la sesión cuenta desde la segunda.
+        self.assertEqual(response.context["totals"].worked_hours, 3.5)
+        self.assertEqual(sum(day.sessions for day in response.context["days"]), 1)
+        self.assertEqual(response.context["totals"].incidents, 2)
 
     def test_employee_detail_ignores_exit_without_entry_and_open_entry(self):
         from datetime import datetime, timedelta
@@ -252,10 +254,10 @@ class EmployeeTests(TestCase):
 
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
 
-        self.assertEqual(response.context["total_hours"], 0.0)
-        self.assertEqual(response.context["complete_sessions"], 0)
-        self.assertTrue(response.context["open_session"])
-        self.assertEqual(len(response.context["incongruences"]), 1)
+        self.assertEqual(response.context["totals"].worked_hours, 0.0)
+        self.assertEqual(sum(day.sessions for day in response.context["days"]), 0)
+        self.assertTrue(any(day.is_open for day in response.context["days"]))
+        self.assertEqual(response.context["totals"].incidents, 1)
 
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class PositionHierarchyTests(TestCase):

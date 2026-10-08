@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Algo salió mal{% endblock %}
+{% block body %}
+<main class="error-page">
+  <div class="stack">
+    <span class="code">500</span>
+    <h1>Algo salió mal</h1>
+    <p class="muted">Ocurrió un error inesperado. Inténtelo de nuevo en unos minutos; si persiste, avise a Sistemas.</p>
+    <p><a class="btn btn-primary" href="/">Volver al inicio</a></p>
+  </div>
+</main>
+{% endblock %}
