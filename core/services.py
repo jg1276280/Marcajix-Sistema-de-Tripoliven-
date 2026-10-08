@@ -128,7 +128,6 @@ def broadcast_attendance_event(log):
         },
     }
     async_to_sync(channel_layer.group_send)("garita-live", {"type": "broadcast.event", "payload": payload})
-    async_to_sync(channel_layer.group_send)("admin-alerts", {"type": "broadcast.event", "payload": {"type": "system.notice", "event": "attendance_processed", "data": payload["data"]}})
 
 
 def broadcast_kiosk_event(event, data=None, message=""):
@@ -137,11 +136,3 @@ def broadcast_kiosk_event(event, data=None, message=""):
         return
     payload = {"type": event, "event": event, "message": message, "data": data or {}}
     async_to_sync(channel_layer.group_send)("garita-live", {"type": "broadcast.event", "payload": payload})
-
-
-def broadcast_alert_event(event_type, message, level="info", **payload):
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    notice = {"type": "system.alert", "event": event_type, "level": level, "message": message, "payload": payload}
-    async_to_sync(channel_layer.group_send)("admin-alerts", {"type": "broadcast.event", "payload": notice})

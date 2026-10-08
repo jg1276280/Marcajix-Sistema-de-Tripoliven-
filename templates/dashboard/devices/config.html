@@ -230,7 +230,7 @@
                 const bg = isBt ? '#fef2f2' : '#f0fdf4';
                 const border = isBt ? '#fca5a5' : '#bbf7d0';
                 const color = isBt ? '#b91c1c' : '#166534';
-                return `<span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sometype-mono);font-size:11px;padding:4px 10px;border-radius:9999px;background:${bg};border:1px solid ${border};color:${color};">${d.port} · ${d.type_label}</span>`;
+                return `<span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sometype-mono);font-size:11px;padding:4px 10px;border-radius:9999px;background:${bg};border:1px solid ${border};color:${color};">${escapeHtml(d.port)} · ${escapeHtml(d.type_label)}</span>`;
             }).join('') +
         '</div>';
     }
@@ -241,7 +241,7 @@
         const badge = document.getElementById('port-status-badge');
         banner.className = 'message ' + levelClass(result.level);
         msg.textContent = result.message;
-        banner.innerHTML = '<strong>' + result.message + '</strong>' + renderDevices(result.devices || []);
+        banner.innerHTML = '<strong>' + escapeHtml(result.message) + '</strong>' + renderDevices(result.devices || []);
         badge.className = 'status ' + badgeClass(result.level);
         badge.innerHTML = '<i class="status-dot"></i> ' + badgeLabel(result.level);
     }

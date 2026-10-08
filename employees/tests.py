@@ -5,7 +5,8 @@ from django.urls import reverse
 from datetime import date
 
 from core.models import AttendanceLog, SecurityEvent
-from core.test_utils import create_test_image as image_upload
+from core.permissions import SYSTEMS
+from core.test_utils import create_test_image as image_upload, create_user_with_role
 from .forms import EmployeeForm
 from .models import Department, Employee, Management, Position
 
@@ -13,7 +14,7 @@ from .models import Department, Employee, Management, Position
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class EmployeeTests(TestCase):
     def setUp(self):
-        self.admin = User.objects.create_user(username="employee-admin", password="ValidPassword123!", is_staff=True)
+        self.admin = create_user_with_role("employee-admin", SYSTEMS)
         self.management = Management.objects.create(name="Tecnología")
         self.department = Department.objects.create(name="Sistemas", management=self.management)
         self.position = Position.objects.create(name="Analista", department=self.department)
@@ -259,7 +260,7 @@ class EmployeeTests(TestCase):
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class PositionHierarchyTests(TestCase):
     def setUp(self):
-        self.admin = User.objects.create_user(username="structure-admin", password="ValidPassword123!", is_staff=True)
+        self.admin = create_user_with_role("structure-admin", SYSTEMS)
         self.management = Management.objects.create(name="Tecnología")
         self.department = Department.objects.create(name="Sistemas", management=self.management)
         self.other_department = Department.objects.create(name="Soporte", management=self.management)

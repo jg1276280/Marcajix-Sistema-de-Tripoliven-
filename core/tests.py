@@ -12,13 +12,14 @@ from employees.models import Department, Employee, Management, Position
 from .forms import LoginForm
 from .models import UserSecurity, AttendanceLog, SecurityEvent
 from .services import AttendanceRegistrationError, register_attendance
-from core.test_utils import create_test_image as attendance_image
+from core.test_utils import create_test_image as attendance_image, create_user_with_role
+from .permissions import HUMAN_RESOURCES, SECURITY, SYSTEMS
 
 
 @override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class AuthenticationTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="login-user", password="ValidPassword123!")
+        self.user = create_user_with_role("login-user", SECURITY)
 
     def test_valid_login_resets_failed_attempts(self):
         UserSecurity.objects.create(user=self.user, failed_login_attempts=2)
@@ -47,13 +48,39 @@ class AuthenticationTests(TestCase):
         self.assertRedirects(response, "/login/?next=/dashboard/")
         self.assertNotIn("_auth_user_id", self.client.session)
 
-    def test_third_failed_login_deactivates_account(self):
-        for _ in range(3):
+    def test_repeated_failed_logins_lock_account_temporarily_without_deactivating_it(self):
+        from .security import MAX_LOGIN_ATTEMPTS
+
+        for _ in range(MAX_LOGIN_ATTEMPTS):
             form = LoginForm(data={"username": "login-user", "password": "WrongPassword123!"})
             self.assertFalse(form.is_valid())
         self.user.refresh_from_db()
-        self.assertFalse(self.user.is_active)
-        self.assertEqual(self.user.security.failed_login_attempts, 3)
+        self.assertTrue(self.user.is_active)
+        self.assertGreater(self.user.security.locked_until, timezone.now())
+
+        locked = LoginForm(data={"username": "login-user", "password": "ValidPassword123!"})
+        self.assertFalse(locked.is_valid())
+        self.assertEqual(locked.non_field_errors().as_data()[0].code, "locked")
+
+        UserSecurity.objects.filter(user=self.user).update(locked_until=timezone.now() - timedelta(seconds=1))
+        self.assertTrue(LoginForm(data={"username": "login-user", "password": "ValidPassword123!"}).is_valid())
+
+    def test_login_errors_do_not_reveal_whether_the_user_exists(self):
+        unknown = LoginForm(data={"username": "nobody", "password": "WrongPassword123!"})
+        wrong_password = LoginForm(data={"username": "login-user", "password": "WrongPassword123!"})
+        self.assertFalse(unknown.is_valid())
+        self.assertFalse(wrong_password.is_valid())
+        self.assertEqual(unknown.non_field_errors(), wrong_password.non_field_errors())
+
+    def test_user_without_role_cannot_log_in(self):
+        User.objects.create_user(username="no-role", password="ValidPassword123!")
+        form = LoginForm(data={"username": "no-role", "password": "ValidPassword123!"})
+        self.assertFalse(form.is_valid())
+        self.assertEqual(form.non_field_errors().as_data()[0].code, "no_role")
+
+    def test_public_registration_is_not_available(self):
+        self.assertEqual(self.client.get("/registro/").status_code, 404)
+        self.assertNotContains(self.client.get("/login/"), "Crear cuenta")
 
 
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
@@ -63,7 +90,7 @@ class AttendanceTests(TestCase):
         self.department = Department.objects.create(name="Sistemas", management=self.management)
         self.position = Position.objects.create(name="Analista", department=self.department)
         self.employee = Employee.objects.create(full_name="Ana Pérez", identification="31395897", position=self.position, photo=attendance_image())
-        self.user = User.objects.create_user(username="attendance-user", password="ValidPassword123!")
+        self.user = create_user_with_role("attendance-user", SECURITY)
 
     def test_database_protects_employee_with_attendance_history(self):
         register_attendance(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
@@ -198,7 +225,7 @@ class AttendanceTests(TestCase):
 
     def test_attendance_page_does_not_preload_unused_attendance_data(self):
         self.client.force_login(self.user)
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):  # Incluye la consulta del rol del usuario (se cachea por petición).
             response = self.client.get("/dashboard/marcajes/")
         self.assertEqual(response.status_code, 200)
 
@@ -208,7 +235,7 @@ class AttendanceTests(TestCase):
         register_attendance(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
         register_attendance(second_employee.pk, timezone.now(), AttendanceLog.ENTRY)
         self.client.force_login(self.user)
-        with self.assertNumQueries(6):
+        with self.assertNumQueries(7):  # Incluye la consulta del rol del usuario (se cachea por petición).
             response = self.client.get("/dashboard/marcajes/empleados/?q=")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["employees"][0]["last_mark"], "Entrada")
@@ -298,7 +325,7 @@ class DataIntegrityTests(TestCase):
             photo=attendance_image("card-three.png"),
             hire_date=date.today(),
         )
-        self.client.force_login(User.objects.create_user(username="detail-checker", password="ValidPassword123!"))
+        self.client.force_login(create_user_with_role("detail-checker", HUMAN_RESOURCES))
         AttendanceLog.objects.create(
             employee=employee,
             marked_at=timezone.now() - timedelta(hours=2),
@@ -337,6 +364,6 @@ class AttendanceServiceTests(TestCase):
         from .services import record_unknown_card
 
         record_unknown_card("CARD-999", "HID · Garita")
-        self.client.force_login(User.objects.create_user(username="history-viewer", password="ValidPassword123!"))
+        self.client.force_login(create_user_with_role("history-viewer", SECURITY))
         response = self.client.get(reverse("attendance_history"), {"q": "CARD-999"})
         self.assertContains(response, "Tarjeta no reconocida")

@@ -146,8 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const renderResults = (employees) => {
         const ids = selectedIds();
         results.innerHTML = employees.map((employee) => `
-            <button type="button" class="history-search-result ${ids.has(String(employee.id)) ? 'is-selected' : ''}" data-id="${employee.id}" data-name="${employee.name}">
-                <span><strong>${employee.name}</strong><small>${employee.hid_card_code} · ${employee.department}</small></span>
+            <button type="button" class="history-search-result ${ids.has(String(employee.id)) ? 'is-selected' : ''}" data-id="${escapeHtml(employee.id)}" data-name="${escapeHtml(employee.name)}">
+                <span><strong>${escapeHtml(employee.name)}</strong><small>${escapeHtml(employee.hid_card_code)} · ${escapeHtml(employee.department)}</small></span>
                 <span>${ids.has(String(employee.id)) ? 'Seleccionado' : 'Seleccionar'}</span>
             </button>
         `).join('') || '<p class="history-search-empty">No encontramos empleados.</p>';
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const chip = document.createElement('span');
         chip.className = 'history-employee-chip';
         chip.dataset.id = button.dataset.id;
-        chip.innerHTML = `${button.dataset.name}<button type="button" class="history-chip-remove" aria-label="Quitar ${button.dataset.name}">&times;</button><input type="hidden" name="employee" value="${button.dataset.id}">`;
+        chip.innerHTML = `${escapeHtml(button.dataset.name)}<button type="button" class="history-chip-remove" aria-label="Quitar ${escapeHtml(button.dataset.name)}">&times;</button><input type="hidden" name="employee" value="${escapeHtml(button.dataset.id)}">`;
         selected.appendChild(chip);
         search.value = '';
         results.hidden = true;

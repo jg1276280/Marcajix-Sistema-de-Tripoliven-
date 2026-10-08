@@ -10,6 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;650;700;800&family=Sometype+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'css/ui-bundle.css' %}?v=1">
   {% block extra_css %}{% endblock %}
+  <script>
+  // Escapa texto antes de insertarlo con innerHTML (nombres, códigos y mensajes vienen de la BD o del lector).
+  window.escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  </script>
 </head>
 <body class="{% block body_class %}{% endblock %}">{% block content %}{% endblock %}
 <script>

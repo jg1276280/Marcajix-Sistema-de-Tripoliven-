@@ -6,7 +6,7 @@
 {% block page_subtitle %}<p class="page-subtitle">Directorio y estado del equipo de colaboradores de la empresa</p>{% endblock %}
 
 {% block topbar_actions %}
-    {% if user.is_staff %}
+    {% if access.manage_employees %}
         <a class="topbar-shortcut button button-accent" href="{% url 'employees:create' %}">
             <svg class="button-icon" aria-hidden="true"><use href="#icon-plus"/></svg> Nuevo empleado
         </a>
@@ -75,8 +75,8 @@
                     </dl>
 
                     <div class="employee-card-actions">
-                        <a class="button-link" href="{% url 'employees:detail' employee.pk %}">Ver expediente</a>
-                        {% if user.is_staff %}
+                        {% if access.view_analytics %}<a class="button-link" href="{% url 'employees:detail' employee.pk %}">Ver expediente</a>{% endif %}
+                        {% if access.manage_employees %}
                             <a class="button-link edit-link" href="{% url 'employees:edit' employee.pk %}">Editar</a>
                         {% endif %}
                     </div>
@@ -104,9 +104,9 @@
                             <td><span class="employee-list-status status-{{ employee.status }}"><i class="status-dot"></i>{{ employee.get_status_display }}</span></td>
                             <td>{{ employee.department|default:"—" }}</td>
                             <td class="employee-list-actions">
-                                <a class="icon-action" href="{% url 'employees:detail' employee.pk %}" aria-label="Ver expediente de {{ employee.full_name }}" title="Ver expediente"><svg aria-hidden="true"><use href="#icon-eye"/></svg></a>
-                                {% if user.is_staff %}<a class="icon-action" href="{% url 'employees:edit' employee.pk %}" aria-label="Editar {{ employee.full_name }}" title="Editar"><svg aria-hidden="true"><use href="#icon-edit"/></svg></a>{% endif %}
-                                {% if user.is_staff %}<form method="post" action="{% url 'employees:delete' employee.pk %}">{% csrf_token %}<button class="icon-action danger" type="submit" aria-label="Eliminar {{ employee.full_name }}" title="Eliminar" onclick="return confirm('¿Eliminar este empleado?')"><svg aria-hidden="true"><use href="#icon-trash"/></svg></button></form>{% endif %}
+                                {% if access.view_analytics %}<a class="icon-action" href="{% url 'employees:detail' employee.pk %}" aria-label="Ver expediente de {{ employee.full_name }}" title="Ver expediente"><svg aria-hidden="true"><use href="#icon-eye"/></svg></a>{% endif %}
+                                {% if access.manage_employees %}<a class="icon-action" href="{% url 'employees:edit' employee.pk %}" aria-label="Editar {{ employee.full_name }}" title="Editar"><svg aria-hidden="true"><use href="#icon-edit"/></svg></a>{% endif %}
+                                {% if access.manage_employees %}<form method="post" action="{% url 'employees:delete' employee.pk %}">{% csrf_token %}<button class="icon-action danger" type="submit" aria-label="Eliminar {{ employee.full_name }}" title="Eliminar" onclick="return confirm('¿Eliminar este empleado?')"><svg aria-hidden="true"><use href="#icon-trash"/></svg></button></form>{% endif %}
                             </td>
                         </tr>
                     {% empty %}<tr><td colspan="6" class="empty-state">No se encontraron empleados.</td></tr>{% endfor %}
@@ -139,7 +139,7 @@
 </div>
 
 <!-- Modal: Crear / Editar Empleado -->
-{% if employee_form and user.is_staff %}
+{% if employee_form and access.manage_employees %}
     <div class="modal-layer {% if open_modal == 'create' or open_modal == 'edit' %}is-open{% endif %}" 
          id="employee-modal" 
          role="dialog" 

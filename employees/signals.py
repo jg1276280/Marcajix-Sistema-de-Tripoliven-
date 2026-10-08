@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
@@ -19,12 +20,13 @@ def delete_previous_photo_after_save(sender, instance, **kwargs):
     previous_photo_name = getattr(instance, "_previous_photo_name", None)
     if previous_photo_name and previous_photo_name != instance.photo.name:
         storage = instance.photo.storage
-        if storage.exists(previous_photo_name):
-            storage.delete(previous_photo_name)
+        # Solo se borra el archivo si la transacción se confirma; si se revierte, la ficha sigue apuntando a él.
+        transaction.on_commit(lambda: storage.exists(previous_photo_name) and storage.delete(previous_photo_name))
         del instance._previous_photo_name
 
 
 @receiver(post_delete, sender=Employee)
 def delete_employee_photo(sender, instance, **kwargs):
     if instance.photo:
-        instance.photo.delete(save=False)
+        storage, name = instance.photo.storage, instance.photo.name
+        transaction.on_commit(lambda: storage.delete(name))

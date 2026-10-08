@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib.admin.models import ADDITION, CHANGE, DELETION, LogEntry
@@ -7,19 +7,24 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.core.paginator import Paginator
 from django.contrib.auth import update_session_auth_hash
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from datetime import datetime, time, timedelta
 import json
+import logging
 from employees.models import Department, Employee
 
-from .forms import AdminUserCreateForm, AdminUserUpdateForm, HIDReaderConfigForm, LoginForm, ProfileForm, ProfilePasswordForm, RegisterForm
-from .permissions import staff_required
+from .forms import HIDReaderConfigForm, LoginForm, ProfileForm, ProfilePasswordForm, UserAccountForm
+from .permissions import CONFIGURE_DEVICES, MANAGE_USERS, MONITOR_DOOR, REGISTER_ATTENDANCE, VIEW_ATTENDANCE_HISTORY, VIEW_AUDIT, capability_required, has_capability
 from .security import reset_failed_logins
 from .models import AttendanceLog, HIDReaderConfig, SecurityEvent
 from .services import AttendanceRegistrationError, broadcast_attendance_event, register_attendance
+
+logger = logging.getLogger(__name__)
 
 
 def _reader_port_status(config):
@@ -178,21 +183,10 @@ def home(request):
     return redirect("dashboard" if request.user.is_authenticated else "login")
 
 
-def register(request):
-    if request.user.is_authenticated:
-        return redirect("dashboard")
-    form = RegisterForm(request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        login(request, form.save())
-        messages.success(request, "Tu cuenta ya está lista.")
-        return redirect("dashboard")
-    return render(request, "auth/register.html", {"form": form})
-
-
 @login_required
 def dashboard(request):
-    context = {"section": "Resumen", "active_page": "overview", "is_admin": request.user.is_staff}
-    if request.user.is_staff:
+    context = {"section": "Resumen", "active_page": "overview", "is_admin": has_capability(request.user, MANAGE_USERS)}
+    if context["is_admin"]:
         today = timezone.localdate()
         today_start = timezone.make_aware(datetime.combine(today, time.min))
         tomorrow_start = today_start + timedelta(days=1)
@@ -208,7 +202,7 @@ def dashboard(request):
     return render(request, "dashboard/index.html", context)
 
 
-@staff_required
+@capability_required(CONFIGURE_DEVICES)
 def device_config_view(request):
     config, _ = HIDReaderConfig.objects.get_or_create(id=1)
     form = HIDReaderConfigForm(request.POST or None, instance=config)
@@ -219,7 +213,7 @@ def device_config_view(request):
     return render(request, "dashboard/devices/config.html", {"form": form, "active_page": "device_config", "reader_status": _reader_port_status(config)})
 
 
-@staff_required
+@capability_required(CONFIGURE_DEVICES)
 def device_config_test(request):
     """Quick port availability check — no blocking read."""
     config, _ = HIDReaderConfig.objects.get_or_create(id=1)
@@ -230,7 +224,7 @@ def device_config_test(request):
     return JsonResponse(_reader_port_status(config))
 
 
-@staff_required
+@capability_required(CONFIGURE_DEVICES)
 def device_read_test(request):
     """Block and try to read ONE card from the serial port within 10 seconds.
 
@@ -252,12 +246,13 @@ def kiosk_unlock(request):
     if not form.is_valid():
         return JsonResponse({"error": "Las credenciales no son válidas."}, status=403)
     user = form.get_user()
-    if not user.is_staff:
-        return JsonResponse({"error": "Se requiere una cuenta de administrador."}, status=403)
+    if not has_capability(user, MONITOR_DOOR):
+        return JsonResponse({"error": "Tu rol no tiene acceso a la garita."}, status=403)
     login(request, user)
-    return JsonResponse({"redirect": "/dashboard/"})
+    return JsonResponse({"redirect": reverse("dashboard")})
 
 
+@capability_required(MONITOR_DOOR)
 def kiosk_garita(request):
     return render(request, "dashboard/kiosk/live.html")
 
@@ -279,63 +274,80 @@ def profile_password(request):
     if request.method == "POST" and form.is_valid():
         form.save()
         update_session_auth_hash(request, request.user)
-        reset_failed_logins(request.user.pk)
+        reset_failed_logins(request.user)
         messages.success(request, "Tu contraseña se actualizó correctamente.")
         return redirect("profile")
     profile_form = ProfileForm(instance=request.user)
     return render(request, "dashboard/profile.html", {"form": profile_form, "password_form": form, "active_page": "profile", "password_error": True})
 
 
-@staff_required
-def user_list(request):
-    query = request.GET.get("q", "").strip()
-    users = User.objects.order_by("username")
+def _audit_user(request, user, action, message):
+    LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(User).pk, object_id=user.pk, object_repr=user.username, action_flag=action, change_message=message)
+
+
+def _render_users(request, **context):
+    users = User.objects.prefetch_related("groups").order_by("username")
+    query = context.pop("query", "")
     if query:
         users = users.filter(Q(username__icontains=query) | Q(email__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query))
-    return render(request, "dashboard/users/index.html", {"users": users, "query": query, "active_page": "users", "section": "Usuarios", "create_form": AdminUserCreateForm()})
+    context.setdefault("create_form", UserAccountForm(acting_user=request.user))
+    return render(request, "dashboard/users/index.html", {"users": users, "query": query, "active_page": "users", "section": "Usuarios", **context})
 
 
-@staff_required
+def _get_manageable_user(request, pk):
+    user = get_object_or_404(User, pk=pk)
+    # Solo un superusuario puede modificar a otro superusuario.
+    if user.is_superuser and not request.user.is_superuser:
+        raise PermissionDenied
+    return user
+
+
+@capability_required(MANAGE_USERS)
+def user_list(request):
+    return _render_users(request, query=request.GET.get("q", "").strip())
+
+
+@capability_required(MANAGE_USERS)
 def user_create(request):
-    form = AdminUserCreateForm(request.POST or None)
+    form = UserAccountForm(request.POST or None, acting_user=request.user)
     if request.method == "POST" and form.is_valid():
         created_user = form.save()
-        LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(User).pk, object_id=created_user.pk, object_repr=created_user.username, action_flag=ADDITION, change_message="Usuario creado desde el panel.")
+        _audit_user(request, created_user, ADDITION, f"Usuario creado desde el panel con rol {form.cleaned_data['role']}.")
         messages.success(request, "Usuario creado correctamente.")
         return redirect("user_list")
-    users = User.objects.order_by("username")
-    return render(request, "dashboard/users/index.html", {"users": users, "query": "", "active_page": "users", "create_form": form, "open_modal": "create"})
+    return _render_users(request, create_form=form, open_modal="create")
 
 
-@staff_required
+@capability_required(MANAGE_USERS)
 def user_edit(request, pk):
-    user = get_object_or_404(User, pk=pk)
-    form = AdminUserUpdateForm(request.POST or None, instance=user)
+    user = _get_manageable_user(request, pk)
+    form = UserAccountForm(request.POST or None, instance=user, acting_user=request.user)
     if request.method == "POST" and form.is_valid():
         form.save()
-        if user.is_active:
-            reset_failed_logins(user.pk)
-        LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(User).pk, object_id=user.pk, object_repr=user.username, action_flag=CHANGE, change_message="Datos del usuario actualizados desde el panel.")
+        _audit_user(request, user, CHANGE, f"Datos del usuario actualizados desde el panel (rol {form.cleaned_data['role']}).")
         messages.success(request, "Usuario actualizado correctamente.")
         return redirect("user_list")
-    users = User.objects.order_by("username")
-    return render(request, "dashboard/users/index.html", {"users": users, "query": "", "active_page": "users", "edit_form": form, "editing_user": user, "open_modal": "edit"})
+    return _render_users(request, edit_form=form, editing_user=user, open_modal="edit")
 
 
-@staff_required
+@capability_required(MANAGE_USERS)
 def user_delete(request, pk):
-    user = get_object_or_404(User, pk=pk)
-    if request.method == "POST":
-        if user.pk == request.user.pk:
-            messages.error(request, "No puedes eliminar tu propia cuenta.")
-        else:
-            LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(User).pk, object_id=user.pk, object_repr=user.username, action_flag=DELETION, change_message="Usuario eliminado desde el panel.")
-            user.delete()
-            messages.success(request, "Usuario eliminado correctamente.")
+    if request.method != "POST":
+        return redirect("user_list")
+    user = _get_manageable_user(request, pk)
+    if user.pk == request.user.pk:
+        messages.error(request, "No puedes eliminar tu propia cuenta.")
+    elif LogEntry.objects.filter(user=user).exists() or user.attendance_registrations.exists() or user.security_events.exists():
+        # Borrar la cuenta borraría en cascada su rastro de auditoría.
+        messages.error(request, "Este usuario tiene actividad registrada. Desactívalo en lugar de eliminarlo para conservar la auditoría.")
+    else:
+        _audit_user(request, user, DELETION, "Usuario eliminado desde el panel.")
+        user.delete()
+        messages.success(request, "Usuario eliminado correctamente.")
     return redirect("user_list")
 
 
-@staff_required
+@capability_required(VIEW_AUDIT)
 def audit_log(request):
     query = request.GET.get("q", "").strip()
     logs = LogEntry.objects.select_related("user", "content_type").order_by("-action_time")
@@ -358,12 +370,12 @@ def audit_log(request):
     return render(request, "dashboard/audit.html", {"logs": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "active_page": "audit"})
 
 
-@login_required
+@capability_required(MONITOR_DOOR)
 def attendance_monitor(request):
     return render(request, "dashboard/attendance.html", {"active_page": "attendance"})
 
 
-@login_required
+@capability_required(REGISTER_ATTENDANCE)
 def attendance_register(request):
     if request.method != "POST":
         return JsonResponse({"error": "Método no permitido."}, status=405)
@@ -399,8 +411,9 @@ def attendance_register(request):
                 broadcast_attendance_event(log)
             except (AttendanceRegistrationError, TypeError, ValueError) as error:
                 errors.append({"employee_id": row.get("employee_id"), "error": str(error), "code": getattr(error, "code", "invalid")})
-    except Exception as exc:  # pragma: no cover - defensive catch for invalid payloads or unexpected runtime errors.
-        return JsonResponse({"error": "No se pudo procesar el lote de marcajes.", "detail": str(exc), "errors": errors, "successes": successes, "warnings": warnings, "count": len(successes), "pending": len(errors)}, status=500)
+    except Exception:  # pragma: no cover - defensive catch for unexpected runtime errors.
+        logger.exception("Error inesperado al procesar un lote de marcajes")
+        return JsonResponse({"error": "No se pudo procesar el lote de marcajes.", "errors": errors, "successes": successes, "warnings": warnings, "count": len(successes), "pending": len(errors)}, status=500)
     status = 201 if successes else 400
     return JsonResponse({"logs": successes, "successes": successes, "warnings": warnings, "errors": errors, "count": len(successes), "pending": len(errors), **(successes[0] if successes else {})}, status=status)
 
@@ -409,7 +422,7 @@ def _attendance_payload(log):
     return {"id": log.pk, "employee_id": log.employee_id, "employee": log.employee.full_name, "department": log.employee.department.name, "photo": log.employee.photo.url, "marked_at": log.marked_at.strftime("%d/%m/%Y %H:%M:%S"), "mark_type": log.get_mark_type_display(), "capture_mode": log.capture_mode, "employee_status": log.employee.status}
 
 
-@login_required
+@capability_required(REGISTER_ATTENDANCE, VIEW_ATTENDANCE_HISTORY)
 def attendance_employee_search(request):
     query = request.GET.get("q", "").strip()
     latest_mark_type = Subquery(AttendanceLog.objects.filter(employee_id=OuterRef("pk")).order_by("-marked_at", "-pk").values("mark_type")[:1])
@@ -425,7 +438,7 @@ def attendance_employee_search(request):
     return JsonResponse({"employees": results})
 
 
-@login_required
+@capability_required(VIEW_ATTENDANCE_HISTORY)
 def attendance_history(request):
     logs = AttendanceLog.objects.select_related("employee__position__department", "registered_by")
     attempts = SecurityEvent.objects.select_related("employee__position__department", "attempted_by")

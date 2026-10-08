@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
-from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.db.models import Case, Count, IntegerField, Max, Min, Prefetch, Q, When
@@ -11,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from datetime import date, datetime, time, timedelta
 
-from core.permissions import staff_required
+from core.permissions import MANAGE_EMPLOYEES, MANAGE_STRUCTURE, VIEW_ANALYTICS, VIEW_EMPLOYEES, capability_required
 
 from core.models import AttendanceLog
 
@@ -54,7 +53,7 @@ def _audit(request, employee, action, detail):
     LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(Employee).pk, object_id=employee.pk, object_repr=employee.full_name, action_flag=action, change_message=detail)
 
 
-@login_required
+@capability_required(VIEW_EMPLOYEES)
 def employee_list(request):
     query = request.GET.get("q", "").strip()
     view_mode = request.GET.get("view", "grid")
@@ -73,7 +72,7 @@ def employee_list(request):
     return render(request, "dashboard/employees/index.html", {"employees": page, "page_obj": page, "query": query, "view_mode": view_mode, "employee_form": EmployeeForm(), "active_page": "employees"})
 
 
-@staff_required
+@capability_required(MANAGE_EMPLOYEES)
 def employee_create(request):
     form = EmployeeForm(request.POST or None, request.FILES or None)
     if request.method == "POST" and form.is_valid():
@@ -85,7 +84,7 @@ def employee_create(request):
     return render(request, "dashboard/employees/index.html", {"employees": employees, "page_obj": employees, "query": "", "view_mode": request.GET.get("view", "grid"), "employee_form": form, "open_modal": "create", "active_page": "employees"})
 
 
-@staff_required
+@capability_required(MANAGE_EMPLOYEES)
 def employee_edit(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
     form = EmployeeForm(request.POST or None, request.FILES or None, instance=employee)
@@ -98,7 +97,7 @@ def employee_edit(request, pk):
     return render(request, "dashboard/employees/index.html", {"employees": employees, "page_obj": employees, "query": "", "view_mode": request.GET.get("view", "grid"), "employee_form": form, "editing_employee": employee, "open_modal": "edit", "active_page": "employees"})
 
 
-@staff_required
+@capability_required(MANAGE_EMPLOYEES)
 def employee_toggle_status(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
     if request.method == "POST":
@@ -112,7 +111,7 @@ def employee_toggle_status(request, pk):
     return redirect("employees:list")
 
 
-@staff_required
+@capability_required(MANAGE_EMPLOYEES)
 def employee_delete(request, pk):
     employee = get_object_or_404(Employee, pk=pk)
     if request.method == "POST":
@@ -129,7 +128,7 @@ def employee_delete(request, pk):
     return redirect("employees:detail", pk=employee.pk)
 
 
-@login_required
+@capability_required(VIEW_ANALYTICS)
 def employee_detail(request, pk):
 
     employee = get_object_or_404(Employee.objects.with_structure(), pk=pk)
@@ -194,7 +193,7 @@ _STRUCTURE_LEVELS = {
 }
 
 
-@staff_required
+@capability_required(MANAGE_STRUCTURE)
 def structure_settings(request):
     action = request.POST.get("action", "") if request.method == "POST" else ""
     level_name, _, operation = action.partition("_")

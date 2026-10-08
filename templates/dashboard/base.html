@@ -35,39 +35,53 @@
             <span>Marcajix</span>
         </a>
 
-        <!-- Sección 01: Workspace -->
+        <!-- Sección 01: Operación (según el rol) -->
         <div class="side-label">1. / WORKSPACE</div>
         <nav class="module-nav" aria-label="Workspace">
             <a class="nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"/></svg><span class="nav-label">Resumen</span>
             </a>
+            {% if access.view_employees %}
             <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-users"/></svg><span class="nav-label">Personal</span>
             </a>
+            {% endif %}
+            {% if access.monitor_door %}
             <a class="nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-check"/></svg><span class="nav-label">Marcajes</span>
             </a>
+            {% endif %}
+            {% if access.view_attendance_history %}
             <a class="nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span class="nav-label">Historial de marcajes</span>
             </a>
+            {% endif %}
         </nav>
 
-        <!-- Sección 02: Administración (Solo Staff/Admin) -->
-        {% if user.is_staff %}
+        <!-- Sección 02: Administración (Sistemas) -->
+        {% if access.manage_users or access.view_audit or access.manage_structure or access.configure_devices %}
             <div class="side-label">2. / ADMINISTRACIÓN</div>
             <nav aria-label="Administración">
+                {% if access.manage_users %}
                 <a class="nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span class="nav-label">Usuarios</span>
                 </a>
+                {% endif %}
+                {% if access.view_audit %}
                 <a class="nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span class="nav-label">Historial de auditoría</span>
                 </a>
+                {% endif %}
+                {% if access.manage_structure %}
                 <a class="nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-grid"/></svg><span class="nav-label">Estructura</span>
                 </a>
+                {% endif %}
+                {% if access.configure_devices %}
                 <a class="nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">
                     <svg class="nav-icon" aria-hidden="true"><use href="#icon-device"/></svg><span class="nav-label">Dispositivos / Garita</span>
                 </a>
+                {% endif %}
             </nav>
         {% endif %}
 
@@ -87,28 +101,40 @@
         <a class="mobile-nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">
             <svg class="nav-icon" aria-hidden="true"><use href="#icon-home"/></svg><span>Inicio</span>
         </a>
+        {% if access.view_employees %}
         <a class="mobile-nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">
             <svg class="nav-icon" aria-hidden="true"><use href="#icon-users"/></svg><span>Personal</span>
         </a>
+        {% endif %}
+        {% if access.monitor_door %}
         <a class="mobile-nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">
             <svg class="nav-icon" aria-hidden="true"><use href="#icon-check"/></svg><span>Marcajes</span>
         </a>
+        {% endif %}
+        {% if access.view_attendance_history %}
         <a class="mobile-nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">
             <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span>Historial</span>
         </a>
+        {% endif %}
         <a class="mobile-nav-link {% if active_page == 'profile' %}active{% endif %}" href="{% url 'profile' %}">
             <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span>Perfil</span>
         </a>
-        {% if user.is_staff %}
+        {% if access.manage_users %}
             <a class="mobile-nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-user"/></svg><span>Usuarios</span>
             </a>
+        {% endif %}
+        {% if access.view_audit %}
             <a class="mobile-nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-history"/></svg><span>Auditoría</span>
             </a>
+        {% endif %}
+        {% if access.manage_structure %}
             <a class="mobile-nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>Estructura</span>
             </a>
+        {% endif %}
+        {% if access.configure_devices %}
             <a class="mobile-nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">
                 <svg class="nav-icon" aria-hidden="true"><use href="#icon-device"/></svg><span>Dispositivos</span>
             </a>
@@ -127,9 +153,11 @@
             </div>
             <!-- Acciones y Menú de Perfil Dropdown -->
             <div class="topbar-actions">
+                {% if access.monitor_door %}
                 <a class="topbar-shortcut button button-outline kiosk-shortcut" href="{% url 'kiosk_garita' %}" aria-label="Abrir modo kiosko">
                     <svg class="button-icon" aria-hidden="true"><use href="#icon-kiosk"/></svg><span>Modo kiosko</span>
                 </a>
+                {% endif %}
                 {% block topbar_actions %}{% endblock %}
 
                 <details class="profile-menu">
@@ -139,7 +167,7 @@
                         </div>
                         <div>
                             <strong>{{ user.username }}</strong>
-                            <small>{% if user.is_staff %}Administrador{% else %}Usuario{% endif %}</small>
+                            <small>{{ user_role|default:"Sin rol" }}</small>
                         </div>
                         <svg class="profile-chevron" aria-hidden="true"><use href="#icon-chevron"/></svg>
                     </summary>

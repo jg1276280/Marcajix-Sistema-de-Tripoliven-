@@ -446,7 +446,7 @@
 {% endblock %}
 
 {% block topbar_actions %}
-    {% if user.is_staff %}
+    {% if access.manage_employees %}
         <a class="topbar-shortcut button button-outline" href="{% url 'employees:edit' employee.pk %}">
             <svg class="button-icon" aria-hidden="true"><use href="#icon-edit"/></svg> Editar ficha
         </a>

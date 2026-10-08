@@ -68,12 +68,12 @@
                                 {{ item.email|default:"Sin correo registrado" }}
                             </td>
 
-                            <!-- Rol (Staff / Usuario) -->
+                            <!-- Rol -->
                             <td>
-                                {% if item.is_staff %}
-                                    <span class="role-badge admin">Administrador</span>
+                                {% if item.is_superuser %}
+                                    <span class="role-badge admin">Superusuario</span>
                                 {% else %}
-                                    <span class="role-badge">Usuario</span>
+                                    {% for group in item.groups.all %}<span class="role-badge{% if group.name == 'Sistemas' %} admin{% endif %}">{{ group.name }}</span>{% empty %}<span class="role-badge">Sin rol</span>{% endfor %}
                                 {% endif %}
                             </td>
 

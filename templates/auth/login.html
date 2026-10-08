@@ -5,11 +5,10 @@
 <main class="auth-shell">
   <div class="auth-card">
     <div class="brand-lockup"><div class="brand-symbol"><i></i><i></i><i></i><i></i></div><span>Marcajix</span></div>
-    <div class="auth-tabs"><a class="active" href="{% url 'login' %}">Iniciar sesión</a><a href="{% url 'register' %}">Crear cuenta</a></div>
-    <div class="auth-copy"><h1>Bienvenido de nuevo</h1><p>Inicia sesión para gestionar tu espacio y tus herramientas.</p></div>
+    <div class="auth-copy"><h1>Bienvenido de nuevo</h1><p>Inicia sesión con la cuenta que te asignó el área de Sistemas.</p></div>
     {% if form.non_field_errors %}<div class="form-error">{{ form.non_field_errors }}</div>{% endif %}
     <form method="post" novalidate>{% csrf_token %}{% for field in form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label><div class="input-wrap">{{ field }}</div>{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>{% endfor %}<button class="button button-accent" type="submit">Iniciar sesión</button></form>
-    <p class="form-foot">¿Todavía no tienes una cuenta? <a href="{% url 'register' %}">Crea una aquí</a></p>
+    <p class="form-foot">El acceso lo gestiona el área de Sistemas. Si necesitas una cuenta, solicítala allí.</p>
   </div>
 </main>
 {% endblock %}

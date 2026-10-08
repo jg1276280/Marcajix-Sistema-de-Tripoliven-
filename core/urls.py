@@ -6,9 +6,8 @@ from .forms import LoginForm
 
 urlpatterns = [
     path("", views.home, name="home"),
-    path("login/", auth_views.LoginView.as_view(template_name="auth/login.html", authentication_form=LoginForm), name="login"),
+    path("login/", auth_views.LoginView.as_view(template_name="auth/login.html", authentication_form=LoginForm, redirect_authenticated_user=True), name="login"),
     path("logout/", auth_views.LogoutView.as_view(), name="logout"),
-    path("registro/", views.register, name="register"),
     path("dashboard/", views.dashboard, name="dashboard"),
     path("dashboard/dispositivos/", views.device_config_view, name="device_config"),
     path("dashboard/dispositivos/probar/", views.device_config_test, name="device_config_test"),

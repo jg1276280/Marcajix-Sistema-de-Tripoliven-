@@ -61,9 +61,12 @@
             <div>
                 <span class="section-number">3.01 / CUENTA</span>
                 <h2>Todo listo para<br><em style="color:var(--color-brand-violet);">empezar.</em></h2>
-                <p>Desde aquí puedes consultar y actualizar únicamente la información de tu propio perfil.</p>
-                <div style="margin-top: 18px;">
-                    <a class="button button-accent" href="{% url 'profile' %}">Ver mi perfil <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>
+                <p>Accesos de tu rol{% if user_role %} ({{ user_role }}){% endif %}.</p>
+                <div style="margin-top: 18px; display: flex; flex-wrap: wrap; gap: 10px;">
+                    {% if access.monitor_door %}<a class="button button-accent" href="{% url 'attendance_monitor' %}">Marcajes de garita <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>{% endif %}
+                    {% if access.view_employees %}<a class="button button-outline" href="{% url 'employees:list' %}">Personal</a>{% endif %}
+                    {% if access.view_attendance_history %}<a class="button button-outline" href="{% url 'attendance_history' %}">Historial de marcajes</a>{% endif %}
+                    <a class="button button-outline" href="{% url 'profile' %}">Mi perfil</a>
                 </div>
             </div>
             <div class="panel-mark" style="color:var(--color-mist);">M</div>

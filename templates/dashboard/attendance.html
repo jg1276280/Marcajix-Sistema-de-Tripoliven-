@@ -7,6 +7,7 @@
 {% block page_subtitle %}<p class="page-subtitle">Selecciona empleados y confirma cada registro de entrada o salida.</p>{% endblock %}
 
 {% block topbar_actions %}
+    <span id="live-status" class="status inactive" role="status" aria-live="polite"><i class="status-dot"></i> Conectando...</span>
 {% endblock %}
 
 {% block dashboard_content %}
@@ -133,12 +134,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const selected = new Map();
     const now = new Date();
     const liveStatus = document.getElementById('live-status');
+    const setLiveStatus = (connected) => {
+        if (!liveStatus) return;
+        liveStatus.className = connected ? 'status active' : 'status inactive';
+        liveStatus.innerHTML = connected ? '<i class="status-dot"></i> En vivo' : '<i class="status-dot"></i> Reconectando...';
+    };
     const toastStack = document.getElementById('toast-stack');
 
     const showToast = (message, tone = 'info') => {
         const toast = document.createElement('div');
         toast.className = `toast toast-${tone}`;
-        toast.innerHTML = `<div class="toast-content">${message}</div><button type="button" class="toast-close" aria-label="Cerrar">×</button>`;
+        toast.innerHTML = `<div class="toast-content">${escapeHtml(message)}</div><button type="button" class="toast-close" aria-label="Cerrar">×</button>`;
         toastStack.appendChild(toast);
         const close = () => toast.remove();
         toast.querySelector('.toast-close').addEventListener('click', close);
@@ -149,17 +155,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const protocols = window.location.protocol === 'https:' ? 'wss' : 'ws';
         const socket = new WebSocket(`${protocols}://${window.location.host}/ws/garita-live/`);
 
-        socket.addEventListener('open', () => {
-            liveStatus.className = 'status active';
-            liveStatus.innerHTML = '<i class="status-dot"></i> Conectado';
-        });
+        socket.addEventListener('open', () => setLiveStatus(true));
 
         socket.addEventListener('message', (event) => {
             try {
                 const payload = JSON.parse(event.data);
                 if (payload && payload.type === 'connection') {
-                    liveStatus.className = 'status active';
-                    liveStatus.innerHTML = '<i class="status-dot"></i> Conectado';
+                    setLiveStatus(true);
                     return;
                 }
                 if (payload && payload.event === 'attendance_processed') {
@@ -174,14 +176,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         socket.addEventListener('close', () => {
-            liveStatus.className = 'status inactive';
-            liveStatus.innerHTML = '<i class="status-dot"></i> Reconectando...';
+            setLiveStatus(false);
             setTimeout(connectLiveStream, 2000);
-        });
-
-        socket.addEventListener('error', () => {
-            liveStatus.className = 'status inactive';
-            liveStatus.innerHTML = '<i class="status-dot"></i> Reconectando...';
         });
     };
 
@@ -222,30 +218,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         rowsList.innerHTML = [...selected.values()].map((emp) => `
-            <div class="manual-row ${emp.error ? 'has-error' : ''}" data-id="${emp.id}" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--color-bone);">
+            <div class="manual-row ${emp.error ? 'has-error' : ''}" data-id="${escapeHtml(emp.id)}" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--color-bone);">
                 <div class="manual-employee" style="display: flex; align-items: center; gap: 12px; min-width: 0;">
-                    <span class="employee-avatar" style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-family: var(--font-plus-jakarta-sans); font-weight: 800; font-size: 12px;">${emp.initial}</span>
+                    <span class="employee-avatar" style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-family: var(--font-plus-jakarta-sans); font-weight: 800; font-size: 12px;">${escapeHtml(emp.initial)}</span>
                     <div style="min-width: 0;">
-                        <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-plus-jakarta-sans); font-weight: 700; color: var(--color-onyx);">${emp.name}</strong>
-                        <small style="display: block; color: var(--color-slate); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${emp.hid_card_code} · ${emp.department}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
+                        <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-plus-jakarta-sans); font-weight: 700; color: var(--color-onyx);">${escapeHtml(emp.name)}</strong>
+                        <small style="display: block; color: var(--color-slate); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(emp.hid_card_code)} · ${escapeHtml(emp.department)}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
                     </div>
                 </div>
 
-                <select class="row-mark-type" aria-label="Tipo para ${emp.name}" style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
+                <select class="row-mark-type" aria-label="Tipo para ${escapeHtml(emp.name)}" style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
                     <option value="entry" ${emp.mark_type === 'entry' ? 'selected' : ''}>Entrada</option>
                     <option value="exit" ${emp.mark_type === 'exit' ? 'selected' : ''}>Salida</option>
                 </select>
 
-                <span class="last-mark" style="color: var(--color-slate); font-size: 11px;">Último: ${emp.last_mark}</span>
+                <span class="last-mark" style="color: var(--color-slate); font-size: 11px;">Último: ${escapeHtml(emp.last_mark)}</span>
 
                 <input class="row-datetime" type="datetime-local" 
                        min="${minDate}" max="${maxDate}" 
                        value="${emp.marked_at}" 
-                       aria-label="Fecha y hora para ${emp.name}"
+                       aria-label="Fecha y hora para ${escapeHtml(emp.name)}"
                        style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
 
-                <button type="button" class="remove-row" aria-label="Quitar ${emp.name}" style="display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #fca5a5; border-radius: 9999px; background: #fef2f2; color: #dc2626; cursor: pointer;"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
-                <p class="row-error" style="grid-column: 1 / -1; margin: 4px 0 0; color: #dc2626; font-size: 12px; font-weight: 600;">${emp.error || ''}</p>
+                <button type="button" class="remove-row" aria-label="Quitar ${escapeHtml(emp.name)}" style="display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #fca5a5; border-radius: 9999px; background: #fef2f2; color: #dc2626; cursor: pointer;"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+                <p class="row-error" style="grid-column: 1 / -1; margin: 4px 0 0; color: #dc2626; font-size: 12px; font-weight: 600;">${escapeHtml(emp.error || '')}</p>
             </div>
         `).join('');
     };
@@ -269,15 +265,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             results.innerHTML = data.employees.map((emp) => `
                 <button type="button" class="employee-result ${selected.has(String(emp.id)) ? 'is-selected' : ''}" 
-                        data-id="${emp.id}" 
-                        data-last-mark="${emp.last_mark}"
-                        data-status="${emp.status}"
+                        data-id="${escapeHtml(emp.id)}" 
+                        data-last-mark="${escapeHtml(emp.last_mark)}"
+                        data-status="${escapeHtml(emp.status)}"
                         style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border: 1px solid var(--color-bone); border-radius: 10px; background: #ffffff; margin-bottom: 6px; cursor: pointer; text-align: left;">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span class="employee-avatar" style="width: 28px; height: 28px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800;">${emp.initial}</span>
+                        <span class="employee-avatar" style="width: 28px; height: 28px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800;">${escapeHtml(emp.initial)}</span>
                         <span>
-                            <strong style="display: block; font-family: var(--font-plus-jakarta-sans); font-size: 13px; color: var(--color-onyx);">${emp.name}</strong>
-                            <small style="display: block; font-size: 11px; color: var(--color-slate);">${emp.hid_card_code} · ${emp.department}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
+                            <strong style="display: block; font-family: var(--font-plus-jakarta-sans); font-size: 13px; color: var(--color-onyx);">${escapeHtml(emp.name)}</strong>
+                            <small style="display: block; font-size: 11px; color: var(--color-slate);">${escapeHtml(emp.hid_card_code)} · ${escapeHtml(emp.department)}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
                         </span>
                     </div>
                     <span class="button button-outline" style="min-height: 28px; padding: 4px 12px; font-size: 11px;">${selected.has(String(emp.id)) ? 'Añadido ✓' : '+ Añadir'}</span>

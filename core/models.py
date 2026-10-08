@@ -30,6 +30,7 @@ class HIDReaderConfig(models.Model):
 class UserSecurity(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="security")
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    locked_until = models.DateTimeField("Bloqueada hasta", null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

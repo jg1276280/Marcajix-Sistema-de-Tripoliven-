@@ -103,16 +103,14 @@
   </header>
 
   <div class="form-grid">
-    {% if form.is_staff %}
-      <div class="field check-field {% if form.is_staff.errors %}has-error{% endif %}">
-        <label for="{{ form.is_staff.id_for_label }}">Rol administrador</label>
-        {{ form.is_staff }}
-        <small class="help-text">Permite gestionar usuarios, personal e historial.</small>
-        {% for error in form.is_staff.errors %}
-          <small class="field-error">{{ error }}</small>
-        {% endfor %}
-      </div>
-    {% endif %}
+    <div class="field {% if form.role.errors %}has-error{% endif %}">
+      <label for="{{ form.role.id_for_label }}">{{ form.role.label }}</label>
+      {{ form.role }}
+      <small class="help-text">Sistemas: configuración y usuarios · Seguridad: garita y marcajes · Recursos Humanos: personal y reportes.</small>
+      {% for error in form.role.errors %}
+        <small class="field-error">{{ error }}</small>
+      {% endfor %}
+    </div>
 
     {% if form.is_active %}
       <div class="field check-field {% if form.is_active.errors %}has-error{% endif %}">
