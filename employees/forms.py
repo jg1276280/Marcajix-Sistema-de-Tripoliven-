@@ -1,38 +1,31 @@
 from datetime import date
 
 from django import forms
-from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from PIL import Image, UnidentifiedImageError
 import re
 
-from .models import Department, Employee, Management
+from .models import Department, Employee, Management, Position
 
 
 class EmployeeForm(forms.ModelForm):
-    user = forms.ModelChoiceField(label="Cuenta de acceso", queryset=User.objects.filter(is_active=True).order_by("username"), required=False, empty_label="Sin cuenta vinculada")
-    management = forms.ModelChoiceField(label="Gerencia", queryset=Management.objects.order_by("name"), empty_label="Selecciona una gerencia", widget=forms.Select(attrs={"data-management-select": "true"}))
-    department = forms.ModelChoiceField(label="Departamento", queryset=Department.objects.select_related("management").order_by("name"), empty_label="Selecciona un departamento", widget=forms.Select(attrs={"data-department-select": "true"}))
-    workday_hours = forms.DecimalField(required=False, min_value=1, max_value=24, widget=forms.NumberInput(attrs={"min": "1", "max": "24", "step": "0.25"}))
-    punctuality_tolerance_minutes = forms.IntegerField(required=False, min_value=0, widget=forms.NumberInput(attrs={"min": "0", "step": "1", "placeholder": "15"}))
+    # Gerencia y departamento solo filtran la lista de cargos; el empleado guarda únicamente su cargo.
+    management = forms.ModelChoiceField(label="Gerencia", queryset=Management.objects.order_by("name"), required=False, empty_label="Selecciona una gerencia", widget=forms.Select(attrs={"data-management-select": "true"}))
+    department = forms.ModelChoiceField(label="Departamento", queryset=Department.objects.select_related("management").order_by("name"), required=False, empty_label="Selecciona un departamento", widget=forms.Select(attrs={"data-department-select": "true"}))
+    position = forms.ModelChoiceField(label="Cargo", queryset=Position.objects.select_related("department__management").order_by("name"), empty_label="Selecciona un cargo", widget=forms.Select(attrs={"data-position-select": "true"}))
 
     class Meta:
         model = Employee
-        fields = ("user", "full_name", "identification", "hid_card_code", "status", "position", "department", "management", "emergency_phone", "emergency_contact_name", "photo", "birthday", "hire_date", "workday_hours", "punctuality_tolerance_minutes")
+        fields = ("full_name", "identification", "hid_card_code", "status", "position", "emergency_phone", "emergency_contact_name", "photo", "birthday", "hire_date")
         widgets = {
             "full_name": forms.TextInput(attrs={"placeholder": "Nombre completo"}),
             "identification": forms.TextInput(attrs={"placeholder": "Ej. 31395897", "inputmode": "numeric", "maxlength": "8"}),
             "hid_card_code": forms.TextInput(attrs={"placeholder": "Código leído por el dispositivo"}),
-            "position": forms.TextInput(attrs={"placeholder": "Cargo o puesto"}),
-            "department": forms.Select(attrs={"data-department-select": "true"}),
-            "management": forms.Select(attrs={"data-management-select": "true"}),
             "emergency_phone": forms.TextInput(attrs={"placeholder": "Teléfono opcional"}),
             "emergency_contact_name": forms.TextInput(attrs={"placeholder": "Nombre opcional"}),
             "photo": forms.ClearableFileInput(attrs={"accept": "image/*", "class": "photo-input"}),
             "birthday": forms.DateInput(attrs={"type": "date"}),
             "hire_date": forms.DateInput(attrs={"type": "date"}),
-            "workday_hours": forms.NumberInput(attrs={"min": "1", "max": "24", "step": "0.25"}),
-            "punctuality_tolerance_minutes": forms.NumberInput(attrs={"min": "0", "step": "1", "placeholder": "15"}),
         }
 
     def clean_photo(self):
@@ -100,18 +93,20 @@ class EmployeeForm(forms.ModelForm):
         cleaned_data = super().clean()
         management = cleaned_data.get("management")
         department = cleaned_data.get("department")
+        position = cleaned_data.get("position")
         if management and department and department.management_id != management.pk:
             self.add_error("department", "El departamento no pertenece a la gerencia seleccionada.")
-        if cleaned_data.get("workday_hours") in (None, ""):
-            cleaned_data["workday_hours"] = 9
-        if cleaned_data.get("punctuality_tolerance_minutes") in (None, ""):
-            cleaned_data["punctuality_tolerance_minutes"] = 15
+        if department and position and position.department_id != department.pk:
+            self.add_error("position", "El cargo no pertenece al departamento seleccionado.")
+        elif management and position and position.department.management_id != management.pk:
+            self.add_error("position", "El cargo no pertenece a la gerencia seleccionada.")
         return cleaned_data
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["workday_hours"].initial = self.instance.workday_hours if self.instance.pk else 9
-        self.fields["punctuality_tolerance_minutes"].initial = self.instance.punctuality_tolerance_minutes if self.instance.pk else 15
+        if self.instance.pk:
+            self.fields["department"].initial = self.instance.position.department_id
+            self.fields["management"].initial = self.instance.position.department.management_id
         for field in self.fields.values():
             field.help_text = "Campo requerido" if field.required else "Campo opcional"
 
@@ -140,5 +135,22 @@ class DepartmentForm(forms.ModelForm):
 class DepartmentRenameForm(forms.ModelForm):
     class Meta:
         model = Department
+        fields = ("name",)
+        widgets = {"name": forms.TextInput(attrs={"autocomplete": "off"})}
+
+class PositionForm(forms.ModelForm):
+    class Meta:
+        model = Position
+        fields = ("department", "name")
+        widgets = {"name": forms.TextInput(attrs={"placeholder": "Ej. Analista de nómina"})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["department"].queryset = Department.objects.select_related("management").order_by("management__name", "name")
+
+
+class PositionRenameForm(forms.ModelForm):
+    class Meta:
+        model = Position
         fields = ("name",)
         widgets = {"name": forms.TextInput(attrs={"autocomplete": "off"})}

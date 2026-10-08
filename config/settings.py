@@ -58,6 +58,9 @@ DATABASES = {"default": {"ENGINE": "mssql", "NAME": db_name, "USER": "" if db_au
 AUTH_PASSWORD_VALIDATORS = [{"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"}, {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"}, {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"}, {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"}]
 LANGUAGE_CODE = "es-es"
 TIME_ZONE = "Europe/Madrid"
+
+# Jornada de referencia (horas) para calcular el balance y las horas extra de cada empleado.
+ATTENDANCE_WORKDAY_HOURS = float(os.getenv("ATTENDANCE_WORKDAY_HOURS", "8"))
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"

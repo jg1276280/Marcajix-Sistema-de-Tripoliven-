@@ -39,22 +39,16 @@ class UserSecurity(models.Model):
 class AttendanceLog(models.Model):
     ENTRY = "entry"
     EXIT = "exit"
-    AUTO = "auto"
-    MARK_TYPES = ((ENTRY, "Entrada"), (EXIT, "Salida"), (AUTO, "Auto / Sugerido"))
-    SESSION_COMPLETE = "complete"
-    SESSION_INCOMPLETE = "incomplete"
-    SESSION_ORPHAN = "orphan"
-    SESSION_STATUSES = ((SESSION_COMPLETE, "Completa"), (SESSION_INCOMPLETE, "Incompleta"), (SESSION_ORPHAN, "Huérfana"))
+    MARK_TYPES = ((ENTRY, "Entrada"), (EXIT, "Salida"))
     HID = "hid"
     MANUAL = "manual"
     CAPTURE_MODES = ((HID, "Lector HID"), (MANUAL, "Registro manual"))
 
-    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT, related_name="attendance_logs")
-    hid_card_code = models.CharField("Código legado", max_length=80, db_index=True, blank=True, null=True)
+    # El índice compuesto attendance_latest_idx ya cubre las búsquedas por empleado.
+    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT, related_name="attendance_logs", db_index=False)
     marked_at = models.DateTimeField("Fecha y hora del marcaje")
-    mark_type = models.CharField("Tipo de marcaje", max_length=10, choices=MARK_TYPES, default=AUTO)
-    session_status = models.CharField("Estado de la sesión", max_length=15, choices=SESSION_STATUSES, default=SESSION_COMPLETE, db_index=True)
-    source = models.CharField("Origen / dispositivo", max_length=120, default="Web")
+    mark_type = models.CharField("Tipo de marcaje", max_length=10, choices=MARK_TYPES)
+    source = models.CharField("Origen / dispositivo", max_length=120, default="Registro manual")
     capture_mode = models.CharField("Modo de captura", max_length=10, choices=CAPTURE_MODES, default=MANUAL)
     registered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_registrations")
 
@@ -63,9 +57,7 @@ class AttendanceLog(models.Model):
         ordering = ("-marked_at",)
         indexes = [
             models.Index(fields=("marked_at",), name="attendance_time_idx"),
-            models.Index(fields=("employee",), name="attendance_employee_idx"),
             models.Index(fields=("employee", "-marked_at", "-id"), name="attendance_latest_idx"),
-            models.Index(fields=("employee", "session_status"), name="attendance_session_status_idx"),
         ]
         verbose_name = "Registro de marcaje"
         verbose_name_plural = "Registros de marcaje"
@@ -74,58 +66,29 @@ class AttendanceLog(models.Model):
         return f"{self.employee} - {self.marked_at:%Y-%m-%d %H:%M:%S}"
 
 
-class AttendanceAttempt(models.Model):
-    BLOCKED = "blocked"
-    STATUSES = ((BLOCKED, "Bloqueado"),)
+class SecurityEvent(models.Model):
+    """Lectura o intento de marcaje rechazado: tarjeta desconocida o empleado sin acceso."""
 
-    employee = models.ForeignKey("employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_attempts")
-    attempted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_attempts")
-    employee_status = models.CharField("Estatus del empleado", max_length=20)
-    mark_type = models.CharField("Tipo solicitado", max_length=10, choices=((AttendanceLog.ENTRY, "Entrada"), (AttendanceLog.EXIT, "Salida")))
-    status = models.CharField("Estado del intento", max_length=20, choices=STATUSES, default=BLOCKED)
+    UNKNOWN_CARD = "unknown_card"
+    BLOCKED_EMPLOYEE = "blocked_employee"
+    EVENT_TYPES = ((UNKNOWN_CARD, "Tarjeta no reconocida"), (BLOCKED_EMPLOYEE, "Empleado sin acceso"))
+
+    event_type = models.CharField("Tipo de evento", max_length=20, choices=EVENT_TYPES)
+    employee = models.ForeignKey("employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="security_events")
+    employee_status = models.CharField("Estatus del empleado", max_length=10, blank=True)
+    hid_card_code = models.CharField("Código de tarjeta leído", max_length=80, blank=True)
+    mark_type = models.CharField("Tipo solicitado", max_length=10, choices=AttendanceLog.MARK_TYPES, blank=True)
     reason = models.CharField("Motivo", max_length=255)
-    source = models.CharField("Origen / dispositivo", max_length=120, default="Registro manual")
-    attempted_at = models.DateTimeField("Fecha y hora", auto_now_add=True)
+    source = models.CharField("Origen / dispositivo", max_length=120)
+    attempted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="security_events")
+    occurred_at = models.DateTimeField("Fecha y hora", auto_now_add=True)
 
     class Meta:
-        db_table = "core_attendance_attempt"
-        ordering = ("-attempted_at", "-pk")
-        indexes = [models.Index(fields=("attempted_at",), name="attendance_attempted_time_idx"), models.Index(fields=("status",), name="attendance_attempt_status_idx")]
-        verbose_name = "Intento de marcaje"
-        verbose_name_plural = "Intentos de marcaje"
+        db_table = "core_security_event"
+        ordering = ("-occurred_at", "-pk")
+        indexes = [models.Index(fields=("occurred_at",), name="security_event_time_idx")]
+        verbose_name = "Evento de seguridad"
+        verbose_name_plural = "Eventos de seguridad"
 
     def __str__(self):
-        return f"{self.employee or 'Empleado eliminado'} - {self.get_status_display()}"
-
-
-class UnrecognizedAttendanceAttempt(models.Model):
-    hid_card_code = models.CharField("Código HID leído", max_length=80, db_index=True)
-    attempted_at = models.DateTimeField("Fecha y hora del intento", auto_now_add=True)
-    source = models.CharField("Origen / dispositivo", max_length=120, default="Web")
-
-    class Meta:
-        db_table = "core_unrecognized_attendance_attempt"
-        ordering = ("-attempted_at",)
-        indexes = [models.Index(fields=("attempted_at",), name="attendance_attempt_time_idx")]
-        verbose_name = "Intento de marcaje no reconocido"
-        verbose_name_plural = "Intentos de marcaje no reconocidos"
-
-
-class SecurityAlert(models.Model):
-    INACTIVE_EMPLOYEE = "inactive_employee"
-    UNKNOWN_CARD = "unknown_card"
-    ALERT_TYPES = ((INACTIVE_EMPLOYEE, "Empleado inactivo"), (UNKNOWN_CARD, "Tarjeta no reconocida"))
-
-    employee = models.ForeignKey("employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="security_alerts")
-    hid_card_code = models.CharField("Código HID leído", max_length=80, db_index=True)
-    occurred_at = models.DateTimeField("Fecha y hora", auto_now_add=True)
-    source = models.CharField("Origen / dispositivo", max_length=120, default="Web")
-    alert_type = models.CharField("Tipo de alerta", max_length=30, choices=ALERT_TYPES)
-    reason = models.CharField("Motivo", max_length=255)
-
-    class Meta:
-        db_table = "core_security_alert"
-        ordering = ("-occurred_at",)
-        indexes = [models.Index(fields=("occurred_at",), name="security_alert_time_idx"), models.Index(fields=("alert_type",), name="security_alert_type_idx")]
-        verbose_name = "Alerta de seguridad"
-        verbose_name_plural = "Alertas de seguridad"
+        return f"{self.get_event_type_display()} - {self.employee or self.hid_card_code}"

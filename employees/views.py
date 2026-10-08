@@ -1,9 +1,10 @@
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.admin.models import ADDITION, CHANGE, LogEntry
 from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
-from django.db.models import Case, Count, IntegerField, Max, Min, Q, When
+from django.db.models import Case, Count, IntegerField, Max, Min, Prefetch, Q, When
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,8 +15,8 @@ from core.permissions import staff_required
 
 from core.models import AttendanceLog
 
-from .forms import DepartmentForm, DepartmentRenameForm, EmployeeForm, ManagementForm, ManagementRenameForm
-from .models import Department, Employee, Management
+from .forms import DepartmentForm, DepartmentRenameForm, EmployeeForm, ManagementForm, ManagementRenameForm, PositionForm, PositionRenameForm
+from .models import Department, Employee, Management, Position
 
 
 def _average_clock(values):
@@ -30,23 +31,13 @@ def _build_attendance_sessions(logs):
     incongruences = []
     open_entry = None
     for log in sorted(logs, key=lambda item: (item.marked_at, item.pk)):
-        if log.session_status in {AttendanceLog.SESSION_INCOMPLETE, AttendanceLog.SESSION_ORPHAN}:
-            if log.mark_type == AttendanceLog.ENTRY:
-                if open_entry is not None:
-                    incongruences.append({"label": "Entrada repetida", "at": timezone.localtime(log.marked_at)})
-                else:
-                    open_entry = log
-                    incongruences.append({"label": "Sesión incompleta", "at": timezone.localtime(log.marked_at)})
-            else:
-                incongruences.append({"label": "Salida huérfana", "at": timezone.localtime(log.marked_at)})
-            continue
-        if log.mark_type == "entry":
+        if log.mark_type == AttendanceLog.ENTRY:
             if open_entry is not None:
                 incongruences.append({"label": "Entrada repetida", "at": timezone.localtime(log.marked_at)})
                 continue
             open_entry = log
             continue
-        if log.mark_type == "exit":
+        if log.mark_type == AttendanceLog.EXIT:
             if open_entry is None:
                 incongruences.append({"label": "Salida sin entrada", "at": timezone.localtime(log.marked_at)})
                 continue
@@ -69,7 +60,7 @@ def employee_list(request):
     view_mode = request.GET.get("view", "grid")
     if view_mode not in {"grid", "list"}:
         view_mode = "grid"
-    employees = Employee.objects.select_related("user", "department", "management").annotate(
+    employees = Employee.objects.with_structure().annotate(
         inactive_sort=Case(
             When(status__in=(Employee.INACTIVE, Employee.RETIRED), then=1),
             default=0,
@@ -77,7 +68,7 @@ def employee_list(request):
         )
     ).order_by("inactive_sort", "full_name")
     if query:
-        employees = employees.filter(Q(full_name__icontains=query) | Q(identification__icontains=query) | Q(hid_card_code__icontains=query) | Q(department__name__icontains=query) | Q(management__name__icontains=query))
+        employees = employees.filter(Q(full_name__icontains=query) | Q(identification__icontains=query) | Q(hid_card_code__icontains=query) | Q(position__name__icontains=query) | Q(position__department__name__icontains=query) | Q(position__department__management__name__icontains=query))
     page = Paginator(employees, 12).get_page(request.GET.get("page"))
     return render(request, "dashboard/employees/index.html", {"employees": page, "page_obj": page, "query": query, "view_mode": view_mode, "employee_form": EmployeeForm(), "active_page": "employees"})
 
@@ -90,7 +81,7 @@ def employee_create(request):
         _audit(request, employee, ADDITION, "Empleado creado desde el módulo Personal.")
         messages.success(request, "Empleado creado correctamente.")
         return redirect("employees:list")
-    employees = Paginator(Employee.objects.select_related("user", "department", "management"), 12).get_page(request.GET.get("page"))
+    employees = Paginator(Employee.objects.with_structure(), 12).get_page(request.GET.get("page"))
     return render(request, "dashboard/employees/index.html", {"employees": employees, "page_obj": employees, "query": "", "view_mode": request.GET.get("view", "grid"), "employee_form": form, "open_modal": "create", "active_page": "employees"})
 
 
@@ -103,7 +94,7 @@ def employee_edit(request, pk):
         _audit(request, employee, CHANGE, "Ficha del empleado actualizada desde el módulo Personal.")
         messages.success(request, "Empleado actualizado correctamente.")
         return redirect("employees:list")
-    employees = Paginator(Employee.objects.select_related("user", "department", "management"), 12).get_page(request.GET.get("page"))
+    employees = Paginator(Employee.objects.with_structure(), 12).get_page(request.GET.get("page"))
     return render(request, "dashboard/employees/index.html", {"employees": employees, "page_obj": employees, "query": "", "view_mode": request.GET.get("view", "grid"), "employee_form": form, "editing_employee": employee, "open_modal": "edit", "active_page": "employees"})
 
 
@@ -141,7 +132,7 @@ def employee_delete(request, pk):
 @login_required
 def employee_detail(request, pk):
 
-    employee = get_object_or_404(Employee.objects.select_related("user", "department", "management"), pk=pk)
+    employee = get_object_or_404(Employee.objects.with_structure(), pk=pk)
     latest_attendance = employee.attendance_logs.order_by("-marked_at", "-pk").first()
     period = request.GET.get("period", "all")
     if period not in {"all", "today", "week", "month", "range"}:
@@ -193,65 +184,59 @@ def employee_detail(request, pk):
     if latest_attendance:
         attendance_status = "inside" if latest_attendance.mark_type == AttendanceLog.ENTRY else "outside"
         attendance_status_label = "Dentro" if attendance_status == "inside" else "Fuera"
-    return render(request, "dashboard/employees/detail.html", {"employee": employee, "latest_attendance": latest_attendance, "average_times": {"entry": _average_clock(local_entries), "exit": _average_clock(local_exits)}, "attendance_status": attendance_status, "attendance_status_label": attendance_status_label, "period": period, "date_from": date_from, "date_to": date_to, "period_start": period_start, "period_end": period_end, "total_hours": round(total_seconds / 3600, 2), "balance_hours": round(total_seconds / 3600 - float(employee.workday_hours) * len(sessions), 2), "complete_sessions": len(sessions), "session_quality": session_quality, "incongruences": incongruences, "open_session": open_entry is not None, "chart_days": chart_days, "recent_statuses": recent_statuses, "active_page": "employees"})
+    return render(request, "dashboard/employees/detail.html", {"employee": employee, "latest_attendance": latest_attendance, "average_times": {"entry": _average_clock(local_entries), "exit": _average_clock(local_exits)}, "attendance_status": attendance_status, "attendance_status_label": attendance_status_label, "period": period, "date_from": date_from, "date_to": date_to, "period_start": period_start, "period_end": period_end, "total_hours": round(total_seconds / 3600, 2), "workday_hours": settings.ATTENDANCE_WORKDAY_HOURS, "balance_hours": round(total_seconds / 3600 - settings.ATTENDANCE_WORKDAY_HOURS * len(sessions), 2), "complete_sessions": len(sessions), "session_quality": session_quality, "incongruences": incongruences, "open_session": open_entry is not None, "chart_days": chart_days, "recent_statuses": recent_statuses, "active_page": "employees"})
+
+
+_STRUCTURE_LEVELS = {
+    "management": {"model": Management, "create_form": ManagementForm, "rename_form": ManagementRenameForm, "children": "departments", "deleted": "Gerencia eliminada correctamente.", "blocked": "No se puede eliminar la gerencia porque tiene departamentos vinculados."},
+    "department": {"model": Department, "create_form": DepartmentForm, "rename_form": DepartmentRenameForm, "children": "positions", "deleted": "Departamento eliminado correctamente.", "blocked": "No se puede eliminar el departamento porque tiene cargos vinculados."},
+    "position": {"model": Position, "create_form": PositionForm, "rename_form": PositionRenameForm, "children": "employees", "deleted": "Cargo eliminado correctamente.", "blocked": "No se puede eliminar el cargo porque tiene empleados vinculados."},
+}
 
 
 @staff_required
 def structure_settings(request):
-    action = request.POST.get("action") if request.method == "POST" else None
-    management_form = ManagementForm(request.POST if action == "management_create" else None, prefix="management")
-    department_form = DepartmentForm(request.POST if action == "department_create" else None, prefix="department")
-    editing_management = None
-    editing_department = None
+    action = request.POST.get("action", "") if request.method == "POST" else ""
+    level_name, _, operation = action.partition("_")
+    level = _STRUCTURE_LEVELS.get(level_name)
+    create_forms = {name: config["create_form"](request.POST if operation == "create" and name == level_name else None, prefix=name) for name, config in _STRUCTURE_LEVELS.items()}
+    editing = None
     if request.method == "POST":
-        if action == "management_create":
-            form = management_form
-        elif action == "department_create":
-            form = department_form
-        elif action == "management_update":
-            management = get_object_or_404(Management, pk=request.POST.get("pk"))
-            form = ManagementRenameForm(request.POST, instance=management)
-            editing_management = management
-        elif action == "department_update":
-            department = get_object_or_404(Department, pk=request.POST.get("pk"))
-            form = DepartmentRenameForm(request.POST, instance=department)
-            editing_department = department
-        elif action == "management_delete":
-            management = get_object_or_404(Management, pk=request.POST.get("pk"))
-            try:
-                with transaction.atomic():
-                    if management.departments.exists() or management.employees.exists():
-                        raise ProtectedError("La gerencia tiene datos vinculados.", management)
-                    management.delete()
-            except ProtectedError:
-                messages.error(request, "No se puede eliminar la gerencia porque tiene departamentos o empleados vinculados.")
-            else:
-                messages.success(request, "Gerencia eliminada correctamente.")
-            return redirect("employees:structure")
-        elif action == "department_delete":
-            department = get_object_or_404(Department, pk=request.POST.get("pk"))
-            try:
-                with transaction.atomic():
-                    if department.employees.exists():
-                        raise ProtectedError("El departamento tiene empleados vinculados.", department)
-                    department.delete()
-            except ProtectedError:
-                messages.error(request, "No se puede eliminar el departamento porque tiene empleados vinculados.")
-            else:
-                messages.success(request, "Departamento eliminado correctamente.")
-            return redirect("employees:structure")
-        else:
+        if level is None or operation not in {"create", "update", "delete"}:
             messages.error(request, "Acción de estructura no reconocida.")
             return redirect("employees:structure")
-
+        if operation == "delete":
+            instance = get_object_or_404(level["model"], pk=request.POST.get("pk"))
+            try:
+                with transaction.atomic():
+                    if getattr(instance, level["children"]).exists():
+                        raise ProtectedError(level["blocked"], instance)
+                    instance.delete()
+            except ProtectedError:
+                messages.error(request, level["blocked"])
+            else:
+                messages.success(request, level["deleted"])
+            return redirect("employees:structure")
+        if operation == "create":
+            form = create_forms[level_name]
+        else:
+            instance = get_object_or_404(level["model"], pk=request.POST.get("pk"))
+            form = level["rename_form"](request.POST, instance=instance)
+            editing = {"level": level_name, "pk": instance.pk}
         if form.is_valid():
             with transaction.atomic():
                 form.save()
             messages.success(request, "Estructura organizativa actualizada correctamente.")
             return redirect("employees:structure")
-    managements = Management.objects.annotate(
-        department_count=Count("departments", distinct=True),
-        employee_count=Count("employees", distinct=True),
-    ).prefetch_related("departments")
-    structure_edit_form = form if request.method == "POST" and action in {"management_update", "department_update"} else None
-    return render(request, "dashboard/employees/structure.html", {"managements": managements, "management_form": management_form, "department_form": department_form, "editing_management": editing_management, "editing_department": editing_department, "editing_structure_pk": editing_management.pk if editing_management else editing_department.pk if editing_department else None, "structure_edit_form": structure_edit_form, "active_page": "structure"})
+    positions = Position.objects.annotate(employee_count=Count("employees"))
+    departments = Department.objects.annotate(position_count=Count("positions")).prefetch_related(Prefetch("positions", queryset=positions))
+    managements = Management.objects.annotate(department_count=Count("departments")).prefetch_related(Prefetch("departments", queryset=departments))
+    return render(request, "dashboard/employees/structure.html", {
+        "managements": managements,
+        "management_form": create_forms["management"],
+        "department_form": create_forms["department"],
+        "position_form": create_forms["position"],
+        "editing": editing,
+        "structure_edit_form": form if editing else None,
+        "active_page": "structure",
+    })

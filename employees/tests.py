@@ -4,10 +4,10 @@ from django.urls import reverse
 
 from datetime import date
 
-from core.models import AttendanceLog, SecurityAlert
+from core.models import AttendanceLog, SecurityEvent
 from core.test_utils import create_test_image as image_upload
 from .forms import EmployeeForm
-from .models import Department, Employee, Management
+from .models import Department, Employee, Management, Position
 
 
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
@@ -16,8 +16,9 @@ class EmployeeTests(TestCase):
         self.admin = User.objects.create_user(username="employee-admin", password="ValidPassword123!", is_staff=True)
         self.management = Management.objects.create(name="Tecnología")
         self.department = Department.objects.create(name="Sistemas", management=self.management)
-        self.payload = {"full_name": "Ana Pérez", "identification": "31395897", "position": "Analista", "department": self.department, "management": self.management, "status": Employee.ACTIVE}
-        self.form_payload = {"full_name": "Ana Pérez", "identification": "31395897", "position": "Analista", "department": self.department.pk, "management": self.management.pk, "hire_date": date.today().isoformat(), "status": Employee.ACTIVE}
+        self.position = Position.objects.create(name="Analista", department=self.department)
+        self.payload = {"full_name": "Ana Pérez", "identification": "31395897", "position": self.position, "status": Employee.ACTIVE}
+        self.form_payload = {"full_name": "Ana Pérez", "identification": "31395897", "position": self.position.pk, "department": self.department.pk, "management": self.management.pk, "hire_date": date.today().isoformat(), "status": Employee.ACTIVE}
 
     def test_employee_form_requires_valid_photo(self):
         form = EmployeeForm(data=self.form_payload)
@@ -49,19 +50,17 @@ class EmployeeTests(TestCase):
         employee = form.save()
         self.assertEqual(employee.hid_card_code, "CARD-001")
 
-    def test_employee_form_persists_birthday_and_tolerance_in_minutes(self):
+    def test_employee_form_persists_birthday(self):
         form = EmployeeForm(
             data={
                 **self.form_payload,
                 "birthday": "1990-05-13",
-                "punctuality_tolerance_minutes": 12,
             },
             files={"photo": image_upload("birthday.png")},
         )
         self.assertTrue(form.is_valid(), form.errors)
         employee = form.save()
         self.assertEqual(str(employee.birthday), "1990-05-13")
-        self.assertEqual(employee.punctuality_tolerance_minutes, 12)
 
     def test_employee_statuses_map_to_access_policies(self):
         employee = Employee.objects.create(photo=image_upload("status.png"), **self.payload)
@@ -99,7 +98,7 @@ class EmployeeTests(TestCase):
 
     def test_employee_delete_is_blocked_by_security_history(self):
         employee = Employee.objects.create(photo=image_upload("alerted.png"), **self.payload)
-        SecurityAlert.objects.create(employee=employee, hid_card_code="CARD-ALERT", alert_type=SecurityAlert.INACTIVE_EMPLOYEE, reason="Empleado inactivo")
+        SecurityEvent.objects.create(employee=employee, event_type=SecurityEvent.BLOCKED_EMPLOYEE, reason="Empleado inactivo", source="Registro manual")
         self.client.force_login(self.admin)
 
         response = self.client.post(reverse("employees:delete", args=[employee.pk]))
@@ -147,7 +146,8 @@ class EmployeeTests(TestCase):
         empty_management = Management.objects.create(name="Vacía")
         linked_management = Management.objects.create(name="Vinculada")
         linked_department = Department.objects.create(name="Personal", management=linked_management)
-        Employee.objects.create(photo=image_upload("linked-structure.png"), **{**self.payload, "department": linked_department, "management": linked_management})
+        linked_position = Position.objects.create(name="Asistente", department=linked_department)
+        Employee.objects.create(photo=image_upload("linked-structure.png"), **{**self.payload, "position": linked_position})
         self.client.force_login(self.admin)
 
         empty_response = self.client.post(reverse("employees:structure"), {"action": "management_delete", "pk": empty_management.pk})
@@ -255,3 +255,46 @@ class EmployeeTests(TestCase):
         self.assertEqual(response.context["complete_sessions"], 0)
         self.assertTrue(response.context["open_session"])
         self.assertEqual(len(response.context["incongruences"]), 1)
+
+@override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+class PositionHierarchyTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_user(username="structure-admin", password="ValidPassword123!", is_staff=True)
+        self.management = Management.objects.create(name="Tecnología")
+        self.department = Department.objects.create(name="Sistemas", management=self.management)
+        self.other_department = Department.objects.create(name="Soporte", management=self.management)
+        self.position = Position.objects.create(name="Analista", department=self.department)
+
+    def test_employee_derives_department_and_management_from_position(self):
+        employee = Employee.objects.create(full_name="Ana Pérez", identification="31395897", position=self.position, photo=image_upload("derived.png"))
+        self.assertEqual(employee.department, self.department)
+        self.assertEqual(employee.management, self.management)
+
+    def test_employee_form_rejects_position_outside_selected_department(self):
+        form = EmployeeForm(data={"full_name": "Ana Pérez", "identification": "31395897", "position": self.position.pk, "department": self.other_department.pk, "hire_date": date.today().isoformat(), "status": Employee.ACTIVE}, files={"photo": image_upload("mismatch.png")})
+        self.assertFalse(form.is_valid())
+        self.assertIn("position", form.errors)
+
+    def test_employee_form_rejects_position_outside_selected_management(self):
+        other_management = Management.objects.create(name="Finanzas")
+        form = EmployeeForm(data={"full_name": "Ana Pérez", "identification": "31395897", "position": self.position.pk, "management": other_management.pk, "hire_date": date.today().isoformat(), "status": Employee.ACTIVE}, files={"photo": image_upload("mismatch-management.png")})
+        self.assertFalse(form.is_valid())
+        self.assertIn("position", form.errors)
+
+    def test_structure_creates_position_and_blocks_deleting_linked_levels(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("employees:structure"), {"action": "position_create", "position-department": self.other_department.pk, "position-name": "Técnico"})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Position.objects.filter(name="Técnico", department=self.other_department).exists())
+
+        Employee.objects.create(full_name="Ana Pérez", identification="31395897", position=self.position, photo=image_upload("linked.png"))
+        self.client.post(reverse("employees:structure"), {"action": "position_delete", "pk": self.position.pk})
+        self.client.post(reverse("employees:structure"), {"action": "department_delete", "pk": self.department.pk})
+        self.assertTrue(Position.objects.filter(pk=self.position.pk).exists())
+        self.assertTrue(Department.objects.filter(pk=self.department.pk).exists())
+
+    def test_employee_list_searches_by_position(self):
+        Employee.objects.create(full_name="Ana Pérez", identification="31395897", position=self.position, photo=image_upload("search.png"))
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("employees:list"), {"q": "Analista"})
+        self.assertEqual(len(response.context["employees"]), 1)

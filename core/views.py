@@ -13,13 +13,13 @@ from django.utils.dateparse import parse_date, parse_datetime
 from django.utils import timezone
 from datetime import datetime, time, timedelta
 import json
-from employees.models import Employee
+from employees.models import Department, Employee
 
 from .forms import AdminUserCreateForm, AdminUserUpdateForm, HIDReaderConfigForm, LoginForm, ProfileForm, ProfilePasswordForm, RegisterForm
 from .permissions import staff_required
 from .security import reset_failed_logins
-from .models import AttendanceAttempt, AttendanceLog, HIDReaderConfig
-from .services import AttendanceRegistrationError, broadcast_attendance_event, register_manual_entry
+from .models import AttendanceLog, HIDReaderConfig, SecurityEvent
+from .services import AttendanceRegistrationError, broadcast_attendance_event, register_attendance
 
 
 def _reader_port_status(config):
@@ -367,22 +367,15 @@ def attendance_monitor(request):
 def attendance_register(request):
     if request.method != "POST":
         return JsonResponse({"error": "Método no permitido."}, status=405)
-    mark_type = request.POST.get("mark_type", AttendanceLog.ENTRY)
-    capture_mode = request.POST.get("capture_mode", AttendanceLog.MANUAL)
-    employee_ids = request.POST.getlist("employee_ids")
-    client_ip = request.META.get("REMOTE_ADDR", "desconocido")
-    if mark_type not in dict(AttendanceLog.MARK_TYPES):
-        return JsonResponse({"error": "Tipo de marcaje inválido."}, status=400)
-    if capture_mode != AttendanceLog.MANUAL:
+    if request.POST.get("capture_mode", AttendanceLog.MANUAL) != AttendanceLog.MANUAL:
         return JsonResponse({"error": "Marcajix solo permite registros manuales."}, status=400)
-    source = f"Registro manual · {client_ip}"
+    source = f"Registro manual · {request.META.get('REMOTE_ADDR', 'desconocido')}"
     try:
         rows = json.loads(request.POST.get("rows", "[]"))
     except (TypeError, ValueError):
         rows = []
-    legacy_rows = not rows
-    if legacy_rows:
-        rows = [{"employee_id": current_id, "mark_type": mark_type, "marked_at": timezone.now().isoformat()} for current_id in employee_ids]
+    if not isinstance(rows, list):
+        rows = []
     successes, errors, warnings = [], [], []
     try:
         for row in rows:
@@ -390,7 +383,7 @@ def attendance_register(request):
                 errors.append({"employee_id": None, "error": "Cada fila debe ser un objeto con employee_id, mark_type y marked_at.", "code": "invalid_row"})
                 continue
             try:
-                row_mark_type = row.get("mark_type", mark_type)
+                row_mark_type = row.get("mark_type")
                 if row_mark_type not in (AttendanceLog.ENTRY, AttendanceLog.EXIT):
                     raise AttendanceRegistrationError("Cada fila debe indicar Entrada o Salida.")
                 marked_at = parse_datetime(row.get("marked_at", ""))
@@ -398,7 +391,7 @@ def attendance_register(request):
                     raise AttendanceRegistrationError("La fecha y hora no son válidas.")
                 if timezone.is_naive(marked_at):
                     marked_at = timezone.make_aware(marked_at, timezone.get_current_timezone())
-                log = register_manual_entry(row.get("employee_id"), marked_at, row_mark_type, source=source, registered_by=request.user)
+                log = register_attendance(row.get("employee_id"), marked_at, row_mark_type, source=source, registered_by=request.user)
                 payload = _attendance_payload(log)
                 successes.append(payload)
                 if log.employee.status == Employee.VACATION:
@@ -420,11 +413,11 @@ def _attendance_payload(log):
 def attendance_employee_search(request):
     query = request.GET.get("q", "").strip()
     latest_mark_type = Subquery(AttendanceLog.objects.filter(employee_id=OuterRef("pk")).order_by("-marked_at", "-pk").values("mark_type")[:1])
-    employees = Employee.objects.select_related("department", "management").annotate(latest_mark_type=latest_mark_type)
+    employees = Employee.objects.with_structure().annotate(latest_mark_type=latest_mark_type)
     if request.GET.get("include_inactive") != "1":
         employees = employees.filter(status__in=Employee.ACCESS_ALLOWED_STATUSES)
     if query:
-        employees = employees.filter(Q(full_name__icontains=query) | Q(identification__icontains=query) | Q(hid_card_code__icontains=query) | Q(department__name__icontains=query))
+        employees = employees.filter(Q(full_name__icontains=query) | Q(identification__icontains=query) | Q(hid_card_code__icontains=query) | Q(position__department__name__icontains=query))
     results = []
     for employee in employees.order_by("full_name")[:30]:
         last_mark = dict(AttendanceLog.MARK_TYPES).get(employee.latest_mark_type, "Sin marcajes")
@@ -434,8 +427,8 @@ def attendance_employee_search(request):
 
 @login_required
 def attendance_history(request):
-    logs = AttendanceLog.objects.select_related("employee", "employee__department", "employee__management").all()
-    attempts = AttendanceAttempt.objects.select_related("employee", "employee__department", "attempted_by").all()
+    logs = AttendanceLog.objects.select_related("employee__position__department", "registered_by")
+    attempts = SecurityEvent.objects.select_related("employee__position__department", "attempted_by")
     query = request.GET.get("q", "").strip()
     date_from = request.GET.get("from", "").strip()
     date_to = request.GET.get("to", "").strip()
@@ -446,29 +439,29 @@ def attendance_history(request):
         date_from = date_to = today
     if query:
         logs = logs.filter(Q(employee__full_name__icontains=query) | Q(employee__identification__icontains=query))
-        attempts = attempts.filter(Q(employee__full_name__icontains=query) | Q(employee__identification__icontains=query) | Q(reason__icontains=query))
+        attempts = attempts.filter(Q(employee__full_name__icontains=query) | Q(employee__identification__icontains=query) | Q(hid_card_code__icontains=query) | Q(reason__icontains=query))
     if date_from:
         date_from_value = parse_date(date_from)
         if date_from_value:
             start = timezone.make_aware(datetime.combine(date_from_value, time.min))
             logs = logs.filter(marked_at__gte=start)
-            attempts = attempts.filter(attempted_at__gte=start)
+            attempts = attempts.filter(occurred_at__gte=start)
     if date_to:
         date_to_value = parse_date(date_to)
         if date_to_value:
             next_day = date_to_value + timedelta(days=1)
             end = timezone.make_aware(datetime.combine(next_day, time.min))
             logs = logs.filter(marked_at__lt=end)
-            attempts = attempts.filter(attempted_at__lt=end)
+            attempts = attempts.filter(occurred_at__lt=end)
     if department:
-        logs = logs.filter(employee__department__name__icontains=department)
-        attempts = attempts.filter(employee__department__name__icontains=department)
+        logs = logs.filter(employee__position__department__name__icontains=department)
+        attempts = attempts.filter(employee__position__department__name__icontains=department)
     if employee_ids:
         logs = logs.filter(employee_id__in=employee_ids)
         attempts = attempts.filter(employee_id__in=employee_ids)
-    events = [{"kind": "log", "record": log, "timestamp": log.marked_at} for log in logs] + [{"kind": "attempt", "record": attempt, "timestamp": attempt.attempted_at} for attempt in attempts]
+    events = [{"kind": "log", "record": log, "timestamp": log.marked_at} for log in logs] + [{"kind": "attempt", "record": attempt, "timestamp": attempt.occurred_at} for attempt in attempts]
     events.sort(key=lambda event: event["timestamp"], reverse=True)
     page = Paginator(events, 25).get_page(request.GET.get("page"))
-    departments = Employee.objects.values_list("department__name", flat=True).distinct().order_by("department__name")
-    selected_employees = Employee.objects.select_related("department").filter(pk__in=employee_ids).order_by("full_name")
+    departments = Department.objects.values_list("name", flat=True).distinct().order_by("name")
+    selected_employees = Employee.objects.with_structure().filter(pk__in=employee_ids).order_by("full_name")
     return render(request, "dashboard/attendance_history.html", {"events": page, "page_obj": page, "query": query, "date_from": date_from, "date_to": date_to, "department": department, "employee_ids": employee_ids, "selected_employees": selected_employees, "departments": departments, "active_page": "attendance_history"})

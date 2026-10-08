@@ -6,3 +6,5 @@ staticfiles/
 media/
 test-media/
 .DS_Store
+logs/
+*.log

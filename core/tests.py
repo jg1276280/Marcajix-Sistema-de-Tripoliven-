@@ -8,10 +8,10 @@ from datetime import date, timedelta
 import json
 import time
 from employees.forms import EmployeeForm
-from employees.models import Department, Employee, Management
+from employees.models import Department, Employee, Management, Position
 from .forms import LoginForm
-from .models import UserSecurity, AttendanceAttempt, AttendanceLog
-from .services import AttendanceRegistrationError, register_manual_entry
+from .models import UserSecurity, AttendanceLog, SecurityEvent
+from .services import AttendanceRegistrationError, register_attendance
 from core.test_utils import create_test_image as attendance_image
 
 
@@ -59,15 +59,14 @@ class AuthenticationTests(TestCase):
 @override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
 class AttendanceTests(TestCase):
     def setUp(self):
-        from employees.models import Department, Employee, Management
-
         self.management = Management.objects.create(name="Tecnología")
         self.department = Department.objects.create(name="Sistemas", management=self.management)
-        self.employee = Employee.objects.create(full_name="Ana Pérez", identification="31395897", position="Analista", department=self.department, management=self.management, photo=attendance_image())
+        self.position = Position.objects.create(name="Analista", department=self.department)
+        self.employee = Employee.objects.create(full_name="Ana Pérez", identification="31395897", position=self.position, photo=attendance_image())
         self.user = User.objects.create_user(username="attendance-user", password="ValidPassword123!")
 
     def test_database_protects_employee_with_attendance_history(self):
-        register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        register_attendance(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
         with self.assertRaises(ProtectedError):
             self.employee.delete()
 
@@ -99,10 +98,8 @@ class AttendanceTests(TestCase):
         self.assertEqual(len(response.json()["errors"]), 1)
 
     def test_manual_endpoint_registers_multiple_employees(self):
-        from employees.models import Department, Employee, Management
-
         operations = Management.objects.create(name="Operaciones")
-        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("second.png"))
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position=Position.objects.create(name="Analista", department=Department.objects.create(name="Finanzas", management=operations)), photo=attendance_image("second.png"))
         self.client.force_login(self.user)
         response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{ "employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}, {"employee_id": second_employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
         self.assertEqual(response.status_code, 201)
@@ -119,10 +116,8 @@ class AttendanceTests(TestCase):
         self.assertEqual(AttendanceLog.objects.count(), 0)
 
     def test_manual_endpoint_processes_valid_rows_and_returns_invalid_rows(self):
-        from employees.models import Department, Employee, Management
-
         operations = Management.objects.create(name="Operaciones")
-        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("partial.png"))
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position=Position.objects.create(name="Analista", department=Department.objects.create(name="Finanzas", management=operations)), photo=attendance_image("partial.png"))
         self.client.force_login(self.user)
         valid_date = timezone.now().isoformat()
         invalid_date = (timezone.now() - timedelta(hours=73)).isoformat()
@@ -151,17 +146,17 @@ class AttendanceTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["errors"][0]["code"], "blocked")
         self.assertEqual(AttendanceLog.objects.count(), 0)
-        attempt = AttendanceAttempt.objects.get()
+        attempt = SecurityEvent.objects.get(event_type=SecurityEvent.BLOCKED_EMPLOYEE)
         self.assertEqual(attempt.employee_status, self.employee.INACTIVE)
         self.assertEqual(attempt.attempted_by, self.user)
         self.assertTrue(LogEntry.objects.filter(object_id=attempt.pk, change_message__contains="estatus Inactivo").exists())
 
     def test_exit_remains_allowed_for_an_open_session_even_when_status_changes(self):
-        register_manual_entry(self.employee.pk, timezone.now() - timedelta(minutes=30), AttendanceLog.ENTRY)
+        register_attendance(self.employee.pk, timezone.now() - timedelta(minutes=30), AttendanceLog.ENTRY)
         self.employee.status = self.employee.INACTIVE
         self.employee.save(update_fields=["status", "updated_at"])
 
-        exit_log = register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.EXIT)
+        exit_log = register_attendance(self.employee.pk, timezone.now(), AttendanceLog.EXIT)
 
         self.assertEqual(exit_log.mark_type, AttendanceLog.EXIT)
         self.assertEqual(AttendanceLog.objects.filter(employee=self.employee).count(), 2)
@@ -171,9 +166,9 @@ class AttendanceTests(TestCase):
         yesterday_entry = today - timedelta(days=1, hours=1)
         yesterday_exit = today - timedelta(days=1, minutes=1)
 
-        register_manual_entry(self.employee.pk, today, AttendanceLog.ENTRY)
-        entry_log = register_manual_entry(self.employee.pk, yesterday_entry, AttendanceLog.ENTRY)
-        exit_log = register_manual_entry(self.employee.pk, yesterday_exit, AttendanceLog.EXIT)
+        register_attendance(self.employee.pk, today, AttendanceLog.ENTRY)
+        entry_log = register_attendance(self.employee.pk, yesterday_entry, AttendanceLog.ENTRY)
+        exit_log = register_attendance(self.employee.pk, yesterday_exit, AttendanceLog.EXIT)
 
         self.assertEqual(entry_log.marked_at, yesterday_entry)
         self.assertEqual(exit_log.marked_at, yesterday_exit)
@@ -183,7 +178,7 @@ class AttendanceTests(TestCase):
         marked_at = timezone.now() - timedelta(days=1)
 
         with self.assertRaises(AttendanceRegistrationError) as context:
-            register_manual_entry(self.employee.pk, marked_at, AttendanceLog.EXIT)
+            register_attendance(self.employee.pk, marked_at, AttendanceLog.EXIT)
 
         self.assertEqual(context.exception.code, "exit_without_entry")
 
@@ -208,12 +203,10 @@ class AttendanceTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_employee_search_uses_bounded_queries_for_last_mark(self):
-        from employees.models import Department, Employee, Management
-
         operations = Management.objects.create(name="Operaciones")
-        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("query-count.png"))
-        register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
-        register_manual_entry(second_employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position=Position.objects.create(name="Analista", department=Department.objects.create(name="Finanzas", management=operations)), photo=attendance_image("query-count.png"))
+        register_attendance(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        register_attendance(second_employee.pk, timezone.now(), AttendanceLog.ENTRY)
         self.client.force_login(self.user)
         with self.assertNumQueries(6):
             response = self.client.get("/dashboard/marcajes/empleados/?q=")
@@ -245,18 +238,15 @@ class DataIntegrityTests(TestCase):
     def setUp(self):
         self.management = Management.objects.create(name="Operaciones")
         self.department = Department.objects.create(name="Logística", management=self.management)
+        self.position = Position.objects.create(name="Analista", department=self.department)
 
     def _employee_payload(self, **overrides):
         payload = {
             "full_name": "Laura Gómez",
             "identification": "12345678",
             "hid_card_code": "CARD-001",
-            "position": "Analista",
-            "department": self.department.pk,
-            "management": self.management.pk,
+            "position": self.position.pk,
             "hire_date": date.today().isoformat(),
-            "workday_hours": "9.00",
-            "punctuality_tolerance_minutes": "15",
             "emergency_phone": "8091234567",
         }
         payload.update(overrides)
@@ -277,9 +267,7 @@ class DataIntegrityTests(TestCase):
             full_name="Ana Pérez",
             identification="31395897",
             hid_card_code="CARD-001",
-            position="Analista",
-            department=self.department,
-            management=self.management,
+            position=self.position,
             photo=attendance_image("card-one.png"),
             hire_date=date.today(),
         )
@@ -292,25 +280,21 @@ class DataIntegrityTests(TestCase):
             full_name="Rosa López",
             identification="31395899",
             hid_card_code="CARD-002",
-            position="Analista",
-            department=self.department,
-            management=self.management,
+            position=self.position,
             photo=attendance_image("card-two.png"),
             hire_date=date.today(),
         )
         now = timezone.now()
-        register_manual_entry(employee.pk, now, AttendanceLog.ENTRY)
+        register_attendance(employee.pk, now, AttendanceLog.ENTRY)
         with self.assertRaises(AttendanceRegistrationError):
-            register_manual_entry(employee.pk, now + timedelta(seconds=30), AttendanceLog.ENTRY)
+            register_attendance(employee.pk, now + timedelta(seconds=30), AttendanceLog.ENTRY)
 
-    def test_employee_detail_ignores_incomplete_session_when_building_hours(self):
+    def test_employee_detail_ignores_open_entry_when_building_hours(self):
         employee = Employee.objects.create(
             full_name="Miguel Silva",
             identification="31395900",
             hid_card_code="CARD-003",
-            position="Analista",
-            department=self.department,
-            management=self.management,
+            position=self.position,
             photo=attendance_image("card-three.png"),
             hire_date=date.today(),
         )
@@ -319,9 +303,40 @@ class DataIntegrityTests(TestCase):
             employee=employee,
             marked_at=timezone.now() - timedelta(hours=2),
             mark_type=AttendanceLog.ENTRY,
-            session_status=AttendanceLog.SESSION_INCOMPLETE,
         )
         response = self.client.get(reverse("employees:detail", args=[employee.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["total_hours"], 0)
         self.assertTrue(response.context["open_session"])
+
+@override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+class AttendanceServiceTests(TestCase):
+    def setUp(self):
+        department = Department.objects.create(name="Seguridad", management=Management.objects.create(name="Operaciones"))
+        self.employee = Employee.objects.create(full_name="Pedro Ruiz", identification="31395901", hid_card_code="CARD-777", position=Position.objects.create(name="Vigilante", department=department), photo=attendance_image("service.png"))
+
+    def test_next_mark_type_alternates_between_entry_and_exit(self):
+        from .services import next_mark_type
+
+        self.assertEqual(next_mark_type(self.employee), AttendanceLog.ENTRY)
+        register_attendance(self.employee.pk, timezone.now() - timedelta(minutes=10), AttendanceLog.ENTRY, capture_mode=AttendanceLog.HID)
+        self.assertEqual(next_mark_type(self.employee), AttendanceLog.EXIT)
+        register_attendance(self.employee.pk, timezone.now(), AttendanceLog.EXIT, capture_mode=AttendanceLog.HID)
+        self.assertEqual(next_mark_type(self.employee), AttendanceLog.ENTRY)
+
+    def test_unknown_card_is_recorded_as_security_event(self):
+        from .services import record_unknown_card
+
+        record_unknown_card("CARD-999", "HID · Garita")
+        event = SecurityEvent.objects.get()
+        self.assertEqual(event.event_type, SecurityEvent.UNKNOWN_CARD)
+        self.assertEqual(event.hid_card_code, "CARD-999")
+        self.assertIsNone(event.employee)
+
+    def test_history_lists_unknown_card_events(self):
+        from .services import record_unknown_card
+
+        record_unknown_card("CARD-999", "HID · Garita")
+        self.client.force_login(User.objects.create_user(username="history-viewer", password="ValidPassword123!"))
+        response = self.client.get(reverse("attendance_history"), {"q": "CARD-999"})
+        self.assertContains(response, "Tarjeta no reconocida")

@@ -534,7 +534,7 @@
             <article class="attendance-kpi"><span class="attendance-kpi-label">Sesiones completas</span><strong class="attendance-kpi-value">{{ complete_sessions }}</strong><span class="attendance-kpi-meta">Intervalos Entrada → Salida válidos</span></article>
         </section>
 
-        <div class="attendance-balance">Balance contra jornada asignada de <strong>{{ employee.workday_hours }} h por sesión</strong>: <strong>{% if balance_hours >= 0 %}+{% endif %}{{ balance_hours|floatformat:2 }} h</strong>{% if open_session %} · Hay una Entrada sin Salida y no se suma al total.{% endif %}{% if incongruences %} · {{ incongruences|length }} evento{{ incongruences|length|pluralize }} incongruente{{ incongruences|length|pluralize }}.{% endif %}</div>
+        <div class="attendance-balance">Balance contra la jornada de referencia de <strong>{{ workday_hours|floatformat:"-2" }} h por sesión</strong>: <strong>{% if balance_hours >= 0 %}+{% endif %}{{ balance_hours|floatformat:2 }} h</strong>{% if open_session %} · Hay una Entrada sin Salida y no se suma al total.{% endif %}{% if incongruences %} · {{ incongruences|length }} evento{{ incongruences|length|pluralize }} incongruente{{ incongruences|length|pluralize }}.{% endif %}</div>
 
         <section class="attendance-overview">
             <article class="attendance-chart">
@@ -589,17 +589,6 @@
             </div>
 
             <div>
-                <dt>Cuenta vinculada</dt>
-                <dd>
-                    {% if employee.user %}
-                        <strong>@{{ employee.user.username }}</strong>
-                    {% else %}
-                        <span class="text-muted">Sin cuenta vinculada</span>
-                    {% endif %}
-                </dd>
-            </div>
-
-            <div>
                 <dt>Fecha de creación</dt>
                 <dd><strong>{{ employee.created_at|date:"d/m/Y H:i" }}</strong></dd>
             </div>
@@ -613,15 +602,6 @@
                 </dd>
             </div>
 
-            <div>
-                <dt>Jornada asignada</dt>
-                <dd><strong>{{ employee.workday_hours }} h/día</strong><small>Base de la jornada laboral</small></dd>
-            </div>
-
-            <div>
-                <dt>Tolerancia</dt>
-                <dd><strong>{{ employee.punctuality_tolerance_minutes|default:"15" }} min</strong><small>Margen para puntualidad</small></dd>
-            </div>
         </dl>
 
         {% if latest_attendance %}

@@ -1,6 +1,0 @@
-2026-10-06 08:21:52,568 INFO     Starting server at tcp:port=8000:interface=127.0.0.1
-2026-10-06 08:21:52,569 INFO     HTTP/2 support not enabled (install the http2 and tls Twisted extras)
-2026-10-06 08:21:52,570 INFO     Configuring endpoint tcp:port=8000:interface=127.0.0.1
-2026-10-06 08:21:52,571 INFO     Listening on TCP address 127.0.0.1:8000
-Not Found: /favicon.ico
-2026-10-06 08:21:57,236 WARNING  Not Found: /favicon.ico

@@ -74,11 +74,11 @@
                         {% if event.kind == 'attempt' %}
                         {% with attempt=event.record %}
                         <tr>
-                            <td><div class="employee-cell"><strong>{{ attempt.employee.full_name|default:"Empleado eliminado" }}</strong></div></td>
+                            <td><div class="employee-cell"><strong>{% if attempt.employee %}{{ attempt.employee.full_name }}{% elif attempt.event_type == 'unknown_card' %}Tarjeta desconocida{% else %}Empleado eliminado{% endif %}</strong></div></td>
                             <td><span>{{ attempt.employee.department|default:"—" }}</span></td>
-                            <td><span>{{ attempt.employee.hid_card_code|default:"—" }}</span></td>
-                            <td><span class="attendance-anomaly-badge">Intento bloqueado</span></td>
-                            <td><time datetime="{{ attempt.attempted_at|date:'Y-m-d H:i:s' }}">{{ attempt.attempted_at|date:"d/m/Y H:i:s" }}</time></td>
+                            <td><span>{{ attempt.hid_card_code|default:"—" }}</span></td>
+                            <td><span class="attendance-anomaly-badge">{{ attempt.get_event_type_display }}</span></td>
+                            <td><time datetime="{{ attempt.occurred_at|date:'Y-m-d H:i:s' }}">{{ attempt.occurred_at|date:"d/m/Y H:i:s" }}</time></td>
                             <td><span class="capture-pill">{{ attempt.reason }}{% if attempt.attempted_by %} · @{{ attempt.attempted_by.username }}{% endif %}</span></td>
                         </tr>
                         {% endwith %}

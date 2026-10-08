@@ -5,8 +5,8 @@ from django.utils import timezone
 
 from employees.models import Employee
 
-from .models import AttendanceLog, HIDReaderConfig, UnrecognizedAttendanceAttempt
-from .services import AttendanceRegistrationError, broadcast_attendance_event, broadcast_kiosk_event, register_manual_entry
+from .models import AttendanceLog, HIDReaderConfig
+from .services import AttendanceRegistrationError, broadcast_attendance_event, broadcast_kiosk_event, next_mark_type, record_unknown_card, register_attendance
 
 
 def listen_hid_reader(config=None):
@@ -35,15 +35,14 @@ def listen_hid_reader(config=None):
                     broadcast_kiosk_event("attendance_duplicate", {"card_code": card_code}, "Lectura duplicada. Espere unos segundos.")
                     continue
                 recent_reads[card_code] = now
-                employee = Employee.objects.select_related("department").filter(hid_card_code__iexact=card_code).first()
+                employee = Employee.objects.with_structure().filter(hid_card_code__iexact=card_code).first()
                 if employee is None:
-                    UnrecognizedAttendanceAttempt.objects.create(hid_card_code=card_code, source=f"HID · {config.name}")
+                    record_unknown_card(card_code, f"HID · {config.name}")
                     broadcast_kiosk_event("card_unrecognized", {"card_code": card_code}, "Tarjeta no reconocida.")
                     continue
-                latest = employee.attendance_logs.order_by("-marked_at", "-pk").first()
-                mark_type = AttendanceLog.EXIT if latest and latest.mark_type == AttendanceLog.ENTRY else AttendanceLog.ENTRY
+                mark_type = next_mark_type(employee)
                 try:
-                    log = register_manual_entry(employee.pk, timezone.now(), mark_type, source=f"HID · {config.name}", capture_mode=AttendanceLog.HID)
+                    log = register_attendance(employee.pk, timezone.now(), mark_type, source=f"HID · {config.name}", capture_mode=AttendanceLog.HID)
                 except AttendanceRegistrationError as error:
                     broadcast_kiosk_event("attendance_rejected", {"employee": employee.full_name, "reason": str(error)}, str(error))
                     continue
@@ -54,4 +53,4 @@ def listen_hid_reader(config=None):
             config.refresh_from_db()
         finally:
             if reader is not None:
-                reader.close()
+                reader.close()
