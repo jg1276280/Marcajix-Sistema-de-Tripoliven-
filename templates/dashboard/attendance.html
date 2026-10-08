@@ -1,0 +1,429 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Registro de marcajes / Marcajix{% endblock %}
+{% block body_class %}dashboard-page attendance-workspace{% endblock %}
+{% block page_route %}1.03 / MARCAJES{% endblock %}
+{% block page_heading %}Registrar marcajes{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Selecciona empleados y confirma cada registro de entrada o salida.</p>{% endblock %}
+
+{% block topbar_actions %}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content attendance-page manual-attendance-page">
+
+    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
+    <!-- Formulario Principal de Carga Manual -->
+    <form id="attendance-form" class="manual-loader" method="post" action="{% url 'attendance_register' %}">
+        {% csrf_token %}
+        <input type="hidden" name="capture_mode" value="manual">
+        <input type="hidden" name="rows" id="attendance-rows">
+
+        <!-- Sección 01: Selección de empleados -->
+        <section class="admin-form" style="margin-top: 0; margin-bottom: 24px;">
+            <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <span class="section-number">1.03.1 / SELECCIÓN</span>
+                    <h3 id="selection-heading" style="margin: 4px 0 0; font-size: 20px; font-family: var(--font-plus-jakarta-sans); font-weight: 800; letter-spacing: -0.03em;">Añadir empleados al registro</h3>
+                </div>
+                <span id="row-count" class="role-badge admin" style="font-size: 11px;">0 seleccionados</span>
+            </header>
+
+            <div class="search-form" style="width: 100%; max-width: none; margin-bottom: 16px;">
+                <input id="employee-search" type="search" autocomplete="off" autofocus placeholder="Buscar por nombre, C.I. o Código de Tarjeta HID...">
+                <button id="clear-search" class="clear-control icon-button" type="button" aria-label="Limpiar búsqueda" hidden style="background: transparent; border: 0; padding: 0;">
+                    <svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg>
+                </button>
+            </div>
+
+            <div id="employee-results" class="employee-results" aria-live="polite" style="min-height: 50px;">
+                <p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>
+            </div>
+        </section>
+
+        <!-- Sección 02: Revisión y confirmación de marcajes -->
+        <section class="admin-form" style="margin-top: 0;">
+            <header style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <span class="section-number">1.03.2 / REVISIÓN</span>
+                    <h3 id="review-heading" style="margin: 4px 0 0; font-size: 20px; font-family: var(--font-plus-jakarta-sans); font-weight: 800; letter-spacing: -0.03em;">Confirmar marcajes</h3>
+                </div>
+                <span class="page-description" style="margin: 0; font-size: 12px; font-family: var(--font-sometype-mono);">Ventana: Últimas 72 horas</span>
+            </header>
+
+            <div class="data-panel" style="box-shadow: none; border-radius: 12px;">
+                <div class="table-scroll">
+                    <div class="manual-table-head" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; padding: 14px 18px; background: var(--color-mist); font-family: var(--font-sometype-mono); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--color-ash);">
+                        <span>Empleado</span>
+                        <span>Tipo</span>
+                        <span>Último evento</span>
+                        <span>Fecha y hora</span>
+                        <span>Acciones</span>
+                    </div>
+                    <div id="attendance-rows-list">
+                        <p class="table-empty" style="padding: 36px 20px; text-align: center; color: var(--color-slate); font-size: 13px;">Selecciona empleados desde el buscador para armar el lote.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="manual-actions" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--color-bone);">
+                <div id="attendance-message" class="attendance-feedback" aria-live="polite" aria-atomic="true" role="status">
+                    <span class="feedback-icon" aria-hidden="true"></span>
+                    <span class="feedback-copy">
+                        <strong class="feedback-title"></strong>
+                        <span class="feedback-detail"></span>
+                    </span>
+                </div>
+                <button type="submit" id="submit-attendance" class="button button-accent" disabled style="min-height: 44px; padding: 12px 28px; white-space: nowrap;">
+                    Procesar marcajes <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
+                </button>
+            </div>
+        </section>
+    </form>
+</div>
+
+<!-- Lógica JavaScript de Carga e Interacción -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const form = document.getElementById('attendance-form');
+    const search = document.getElementById('employee-search');
+    const results = document.getElementById('employee-results');
+    const rowsList = document.getElementById('attendance-rows-list');
+    const rowsInput = document.getElementById('attendance-rows');
+    const message = document.getElementById('attendance-message');
+    const submit = document.getElementById('submit-attendance');
+    const rowCount = document.getElementById('row-count');
+    const clearSearch = document.getElementById('clear-search');
+    const feedbackTitle = message.querySelector('.feedback-title');
+    const feedbackDetail = message.querySelector('.feedback-detail');
+    const draftStorageKey = 'marcajix.manual-attendance-draft';
+
+    const playAlertTone = () => {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 440;
+        gain.gain.setValueAtTime(0.0001, context.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.24);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.25);
+        oscillator.addEventListener('ended', () => context.close(), { once: true });
+    };
+
+    const setFeedback = (text, state) => {
+        message.className = `attendance-feedback ${state}`;
+        const styles = {
+            'is-loading': 'color:#607568;background:#f2f6f3;border-color:#dbe7de',
+            'is-success': 'color:#087b36;background:#eaf8ee;border-color:#a9ddb7',
+            'is-warning': 'color:#805f00;background:#fffbeb;border-color:#efd27a',
+            'is-error': 'color:#a52f2f;background:#fff0f0;border-color:#efb3b3'
+        };
+        message.style.cssText = styles[state] || '';
+        const title = state === 'is-error' ? 'Revisa los marcajes' : state === 'is-warning' ? 'Marcajes pendientes' : state === 'is-success' ? 'Carga completada' : 'Procesando marcajes';
+        feedbackTitle.textContent = title;
+        feedbackDetail.textContent = text;
+    };
+
+    const selected = new Map();
+    const now = new Date();
+    const liveStatus = document.getElementById('live-status');
+    const toastStack = document.getElementById('toast-stack');
+
+    const showToast = (message, tone = 'info') => {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${tone}`;
+        toast.innerHTML = `<div class="toast-content">${message}</div><button type="button" class="toast-close" aria-label="Cerrar">×</button>`;
+        toastStack.appendChild(toast);
+        const close = () => toast.remove();
+        toast.querySelector('.toast-close').addEventListener('click', close);
+        setTimeout(close, 4500);
+    };
+
+    const connectLiveStream = () => {
+        const protocols = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const socket = new WebSocket(`${protocols}://${window.location.host}/ws/garita-live/`);
+
+        socket.addEventListener('open', () => {
+            liveStatus.className = 'status active';
+            liveStatus.innerHTML = '<i class="status-dot"></i> Conectado';
+        });
+
+        socket.addEventListener('message', (event) => {
+            try {
+                const payload = JSON.parse(event.data);
+                if (payload && payload.type === 'connection') {
+                    liveStatus.className = 'status active';
+                    liveStatus.innerHTML = '<i class="status-dot"></i> Conectado';
+                    return;
+                }
+                if (payload && payload.event === 'attendance_processed') {
+                    showToast(`Marcaje procesado para ${payload.data.employee}`, 'success');
+                }
+                if (payload && ['card_unrecognized', 'attendance_duplicate', 'attendance_rejected', 'reader_error'].includes(payload.event)) {
+                    showToast(payload.message || 'El lector requiere atención.', payload.event === 'reader_error' ? 'error' : 'warning');
+                }
+            } catch (error) {
+                console.warn('WS payload no válido', error);
+            }
+        });
+
+        socket.addEventListener('close', () => {
+            liveStatus.className = 'status inactive';
+            liveStatus.innerHTML = '<i class="status-dot"></i> Reconectando...';
+            setTimeout(connectLiveStream, 2000);
+        });
+
+        socket.addEventListener('error', () => {
+            liveStatus.className = 'status inactive';
+            liveStatus.innerHTML = '<i class="status-dot"></i> Reconectando...';
+        });
+    };
+
+    connectLiveStream();
+
+    const saveDraft = () => {
+        sessionStorage.setItem(draftStorageKey, JSON.stringify([...selected.values()]));
+    };
+
+    const restoreDraft = () => {
+        try {
+            const draft = JSON.parse(sessionStorage.getItem(draftStorageKey) || '[]');
+            if (Array.isArray(draft)) {
+                draft.forEach((employee) => {
+                    if (employee && employee.id && employee.name) {
+                        selected.set(String(employee.id), employee);
+                    }
+                });
+            }
+        } catch (error) {
+            sessionStorage.removeItem(draftStorageKey);
+        }
+    };
+    
+    // Cálculo de rango de fechas local (Ventana de 72 horas)
+    const localValue = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const minDate = localValue(new Date(now.getTime() - 72 * 60 * 60 * 1000));
+    const maxDate = localValue(now);
+
+    // Renderizado dinámico manteniendo estado de campos
+    const renderRows = () => {
+        rowCount.textContent = `${selected.size} seleccionado${selected.size === 1 ? '' : 's'}`;
+        submit.disabled = !selected.size;
+
+        if (!selected.size) {
+            rowsList.innerHTML = '<p class="table-empty" style="padding: 36px 20px; text-align: center; color: var(--color-slate); font-size: 13px;">Selecciona empleados desde el buscador para armar el lote.</p>';
+            return;
+        }
+
+        rowsList.innerHTML = [...selected.values()].map((emp) => `
+            <div class="manual-row ${emp.error ? 'has-error' : ''}" data-id="${emp.id}" style="display: grid; grid-template-columns: minmax(220px, 1.4fr) 120px minmax(130px, 1fr) 205px 34px; gap: 14px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--color-bone);">
+                <div class="manual-employee" style="display: flex; align-items: center; gap: 12px; min-width: 0;">
+                    <span class="employee-avatar" style="width: 32px; height: 32px; min-width: 32px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-family: var(--font-plus-jakarta-sans); font-weight: 800; font-size: 12px;">${emp.initial}</span>
+                    <div style="min-width: 0;">
+                        <strong style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-plus-jakarta-sans); font-weight: 700; color: var(--color-onyx);">${emp.name}</strong>
+                        <small style="display: block; color: var(--color-slate); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${emp.hid_card_code} · ${emp.department}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
+                    </div>
+                </div>
+
+                <select class="row-mark-type" aria-label="Tipo para ${emp.name}" style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
+                    <option value="entry" ${emp.mark_type === 'entry' ? 'selected' : ''}>Entrada</option>
+                    <option value="exit" ${emp.mark_type === 'exit' ? 'selected' : ''}>Salida</option>
+                </select>
+
+                <span class="last-mark" style="color: var(--color-slate); font-size: 11px;">Último: ${emp.last_mark}</span>
+
+                <input class="row-datetime" type="datetime-local" 
+                       min="${minDate}" max="${maxDate}" 
+                       value="${emp.marked_at}" 
+                       aria-label="Fecha y hora para ${emp.name}"
+                       style="width: 100%; border: 1px solid var(--color-cloud); border-radius: 9px; padding: 8px 10px; font-family: var(--font-inter); font-size: 13px;">
+
+                <button type="button" class="remove-row" aria-label="Quitar ${emp.name}" style="display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #fca5a5; border-radius: 9999px; background: #fef2f2; color: #dc2626; cursor: pointer;"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
+                <p class="row-error" style="grid-column: 1 / -1; margin: 4px 0 0; color: #dc2626; font-size: 12px; font-weight: 600;">${emp.error || ''}</p>
+            </div>
+        `).join('');
+    };
+
+    // Búsqueda AJAX de empleados
+    const searchEmployees = async () => {
+        const query = search.value.trim();
+        if (!query) {
+            results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>';
+            return;
+        }
+
+        try {
+            const response = await fetch(`{% url 'attendance_employee_search' %}?q=${encodeURIComponent(query)}`);
+            const data = await response.json();
+
+            if (!data.employees.length) {
+                results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">No encontramos empleados activos.</p>';
+                return;
+            }
+
+            results.innerHTML = data.employees.map((emp) => `
+                <button type="button" class="employee-result ${selected.has(String(emp.id)) ? 'is-selected' : ''}" 
+                        data-id="${emp.id}" 
+                        data-last-mark="${emp.last_mark}"
+                        data-status="${emp.status}"
+                        style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 14px; border: 1px solid var(--color-bone); border-radius: 10px; background: #ffffff; margin-bottom: 6px; cursor: pointer; text-align: left;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span class="employee-avatar" style="width: 28px; height: 28px; border-radius: 50%; background: var(--color-brand-violet); color: #fff; display: grid; place-items: center; font-size: 11px; font-weight: 800;">${emp.initial}</span>
+                        <span>
+                            <strong style="display: block; font-family: var(--font-plus-jakarta-sans); font-size: 13px; color: var(--color-onyx);">${emp.name}</strong>
+                            <small style="display: block; font-size: 11px; color: var(--color-slate);">${emp.hid_card_code} · ${emp.department}${emp.status === 'vacation' ? ' · Vacaciones' : ''}</small>
+                        </span>
+                    </div>
+                    <span class="button button-outline" style="min-height: 28px; padding: 4px 12px; font-size: 11px;">${selected.has(String(emp.id)) ? 'Añadido ✓' : '+ Añadir'}</span>
+                </button>
+            `).join('');
+        } catch (err) {
+            results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Error al consultar el servidor.</p>';
+        }
+    };
+
+    // Debounce para optimizar peticiones en el input
+    let searchTimer;
+    search.addEventListener('input', () => {
+        clearSearch.hidden = !search.value.trim();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchEmployees, 180);
+    });
+
+    // Agregar / Quitar desde los resultados de búsqueda
+    results.addEventListener('click', (event) => {
+        const item = event.target.closest('.employee-result');
+        if (!item) return;
+
+        const id = String(item.dataset.id);
+
+        if (selected.has(id)) {
+            selected.delete(id);
+        } else {
+            const smallParts = item.querySelector('small').textContent.split(' · ');
+            selected.set(id, {
+                id,
+                name: item.querySelector('strong').textContent,
+                hid_card_code: smallParts[0] || '',
+                department: smallParts[1] || '',
+                status: item.dataset.status || 'active',
+                initial: item.querySelector('.employee-avatar').textContent,
+                last_mark: item.dataset.lastMark || 'Sin marcajes',
+                mark_type: 'entry',
+                marked_at: maxDate,
+                error: null
+            });
+        }
+
+        saveDraft();
+        renderRows();
+        search.value = '';
+        searchEmployees();
+        search.focus();
+    });
+
+    // Escuchar cambios de inputs dentro de la tabla para no perderlos al re-renderizar
+    rowsList.addEventListener('change', (event) => {
+        const row = event.target.closest('.manual-row');
+        if (!row) return;
+
+        const emp = selected.get(row.dataset.id);
+        if (emp) {
+            if (event.target.classList.contains('row-mark-type')) {
+                emp.mark_type = event.target.value;
+            } else if (event.target.classList.contains('row-datetime')) {
+                emp.marked_at = event.target.value;
+            }
+            saveDraft();
+        }
+    });
+
+    // Eliminar fila individual
+    rowsList.addEventListener('click', (event) => {
+        const removeBtn = event.target.closest('.remove-row');
+        if (removeBtn) {
+            const row = removeBtn.closest('.manual-row');
+            selected.delete(row.dataset.id);
+            saveDraft();
+            renderRows();
+            searchEmployees();
+        }
+    });
+
+    // Limpiar campo de búsqueda
+    clearSearch.addEventListener('click', () => {
+        search.value = '';
+        clearSearch.hidden = true;
+        results.innerHTML = '<p class="search-empty" style="margin: 8px 0; color: var(--color-slate); font-size: 13px; text-align: center;">Escribe en el buscador para añadir empleados activos.</p>';
+        search.focus();
+    });
+
+    // Enviar formulario mediante Fetch AJAX
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        // Bloquear interfaz durante procesamiento
+        submit.disabled = true;
+        setFeedback('Procesando marcajes...', 'is-loading');
+
+        // Recopilar filas del estado actual
+        const rows = [...selected.values()].map((emp) => ({
+            employee_id: emp.id,
+            mark_type: emp.mark_type,
+            marked_at: emp.marked_at
+        }));
+
+        rowsInput.value = JSON.stringify(rows);
+
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            const data = await response.json();
+            const errorsMap = new Map((data.errors || []).map((err) => [String(err.employee_id), err.error]));
+
+            // Remover exitosos del Map
+            (data.successes || []).forEach((succ) => selected.delete(String(succ.employee_id)));
+
+            // Actualizar errores en el estado de los que quedaron pendientes
+            selected.forEach((emp, id) => {
+                emp.error = errorsMap.get(id) || null;
+            });
+
+            saveDraft();
+            renderRows();
+
+            const successCount = (data.successes || []).length;
+            const errorCount = (data.errors || []).length;
+            const warningMessages = (data.warnings || []).map((warning) => warning.message);
+            if ((data.errors || []).some((error) => error.code === 'blocked')) playAlertTone();
+
+            if (errorCount && successCount) {
+                setFeedback(`${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'} · ${errorCount} pendiente${errorCount === 1 ? '' : 's'} por corregir. Revisa las filas marcadas.`, 'is-warning');
+            } else if (errorCount) {
+                setFeedback(`No se guardó ningún marcaje. ${errorCount} fila${errorCount === 1 ? '' : 's'} necesita${errorCount === 1 ? '' : 'n'} corrección. Revisa el detalle en rojo.`, 'is-error');
+            } else {
+                setFeedback(warningMessages.length ? `${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'}. ${warningMessages.join(' ')}` : `${successCount} marcaje${successCount === 1 ? '' : 's'} guardado${successCount === 1 ? '' : 's'} correctamente.`, warningMessages.length ? 'is-warning' : 'is-success');
+            }
+
+        } catch (err) {
+            setFeedback('Ocurrió un error inesperado al procesar la solicitud.', 'is-error');
+        } finally {
+            submit.disabled = !selected.size;
+        }
+    });
+
+    restoreDraft();
+    renderRows();
+});
+</script>
+{% endblock %}

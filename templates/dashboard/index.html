@@ -1,0 +1,75 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}RESÚMEN / Marcajix{% endblock %}
+{% block page_route %}1.01 / RESÚMEN{% endblock %}
+{% block page_heading %}Resumen{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Actividad general del Sistema de Gestión Marcajix</p>{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content">
+
+    {% if is_admin %}
+        <!-- Tarjetas de Métricas Estadísticas (Vista Administrador) -->
+        <section class="stats-grid">
+            
+            <article class="stat-card dark">
+                <div class="stat-top">
+                    <span>USUARIOS ACTIVOS EN EL SISTEMA</span>
+                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
+                </div>
+                <strong>{{ active_user_count|default:0|stringformat:"02d" }}</strong>
+                <small><i class="positive">{{ user_count|default:0 }}</i> registrados en total</small>
+            </article>
+
+            <article class="stat-card yellow">
+                <div class="stat-top">
+                    <span>EMPLEADOS ACTIVOS</span>
+                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
+                </div>
+                <strong>{{ active_employees_count|default:0|stringformat:"02d" }}</strong>
+                <small><i>{{ employee_count|default:0 }}</i> empleados registrados</small>
+            </article>
+
+            <article class="stat-card light">
+                <div class="stat-top">
+                    <span>MARCAJES HOY</span>
+                    <b><svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></b>
+                </div>
+                <strong>{{ today_logs_count|default:0|stringformat:"02d" }}</strong>
+                <small><i class="neutral">Eventos</i> registrados hoy</small>
+            </article>
+
+        </section>
+
+        <!-- Panel Informativo / Accesos Rápidos (Administración) -->
+        <section class="welcome-panel" style="margin-top: 24px;">
+            <div>
+                <span class="section-number">2.01 / ADMINISTRACIÓN</span>
+                <h2>Tripoliven<br><em style="color:var(--color-brand-violet);">en marcha.</em></h2>
+                <p>Centraliza el personal y registra cada entrada y salida manual con información clara para la operación diaria.</p>
+                <div style="margin-top: 18px;">
+                    <a class="button button-accent" href="{% url 'attendance_monitor' %}">Registrar marcaje <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>
+                </div>
+            </div>
+            <div class="panel-mark" style="color:var(--color-mist);">M</div>
+        </section>
+
+    {% else %}
+
+        <!-- Panel de Bienvenida (Vista Usuario Estándar) -->
+        <section class="welcome-panel user-welcome">
+            <div>
+                <span class="section-number">3.01 / CUENTA</span>
+                <h2>Todo listo para<br><em style="color:var(--color-brand-violet);">empezar.</em></h2>
+                <p>Desde aquí puedes consultar y actualizar únicamente la información de tu propio perfil.</p>
+                <div style="margin-top: 18px;">
+                    <a class="button button-accent" href="{% url 'profile' %}">Ver mi perfil <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg></a>
+                </div>
+            </div>
+            <div class="panel-mark" style="color:var(--color-mist);">M</div>
+        </section>
+
+    {% endif %}
+
+</div>
+{% endblock %}

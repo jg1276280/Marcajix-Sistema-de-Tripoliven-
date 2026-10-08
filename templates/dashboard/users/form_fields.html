@@ -1,0 +1,127 @@
+{% if form.non_field_errors %}
+  <div class="form-error">
+    {% for error in form.non_field_errors %}
+      <p>{{ error }}</p>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<!-- Sección 01: Acceso -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>01</span>
+    <div>
+      <h3>Acceso</h3>
+      <p>Credenciales y cuenta del sistema.</p>
+    </div>
+  </header>
+
+  <div class="form-grid">
+    {% if form.username %}
+      <div class="field {% if form.username.errors %}has-error{% endif %}">
+        <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+        {{ form.username }}
+        {% for error in form.username.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.email %}
+      <div class="field {% if form.email.errors %}has-error{% endif %}">
+        <label for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+        {{ form.email }}
+        {% for error in form.email.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.password1 %}
+      <div class="field {% if form.password1.errors %}has-error{% endif %}">
+        <label for="{{ form.password1.id_for_label }}">{{ form.password1.label }}</label>
+        {{ form.password1 }}
+        {% for error in form.password1.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.password2 %}
+      <div class="field {% if form.password2.errors %}has-error{% endif %}">
+        <label for="{{ form.password2.id_for_label }}">{{ form.password2.label }}</label>
+        {{ form.password2 }}
+        {% for error in form.password2.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Sección 02: Información personal -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>02</span>
+    <div>
+      <h3>Información personal</h3>
+      <p>Datos visibles dentro del sistema.</p>
+    </div>
+  </header>
+
+  <div class="form-grid">
+    {% if form.first_name %}
+      <div class="field {% if form.first_name.errors %}has-error{% endif %}">
+        <label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+        {{ form.first_name }}
+        {% for error in form.first_name.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.last_name %}
+      <div class="field {% if form.last_name.errors %}has-error{% endif %}">
+        <label for="{{ form.last_name.id_for_label }}">{{ form.last_name.label }}</label>
+        {{ form.last_name }}
+        {% for error in form.last_name.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Sección 03: Permisos y estado -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>03</span>
+    <div>
+      <h3>Permisos y estado</h3>
+      <p>Define el alcance de esta cuenta.</p>
+    </div>
+  </header>
+
+  <div class="form-grid">
+    {% if form.is_staff %}
+      <div class="field check-field {% if form.is_staff.errors %}has-error{% endif %}">
+        <label for="{{ form.is_staff.id_for_label }}">Rol administrador</label>
+        {{ form.is_staff }}
+        <small class="help-text">Permite gestionar usuarios, personal e historial.</small>
+        {% for error in form.is_staff.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.is_active %}
+      <div class="field check-field {% if form.is_active.errors %}has-error{% endif %}">
+        <label for="{{ form.is_active.id_for_label }}">Cuenta activa</label>
+        {{ form.is_active }}
+        {% for error in form.is_active.errors %}
+          <small class="field-error">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>

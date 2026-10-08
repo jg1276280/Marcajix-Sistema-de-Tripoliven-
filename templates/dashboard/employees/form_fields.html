@@ -1,0 +1,262 @@
+{% if form.non_field_errors %}
+  <div class="form-error">
+    {% for error in form.non_field_errors %}
+      <p>{{ error }}</p>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<!-- Sección 01: Identificación -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>01</span>
+    <div>
+      <h3>Identificación</h3>
+      <p>Datos principales del empleado.</p>
+    </div>
+  </header>
+
+  <div class="employee-form-grid">
+    {% if form.user %}
+      <div class="field {% if form.user.errors %}has-error{% endif %}">
+        <label for="{{ form.user.id_for_label }}">
+          {{ form.user.label }}
+          <small class="field-requirement">{% if form.user.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.user }}
+        {% if form.user.help_text %}<small class="help-text">{{ form.user.help_text }}</small>{% endif %}
+        {% for error in form.user.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.full_name %}
+      <div class="field {% if form.full_name.errors %}has-error{% endif %}">
+        <label for="{{ form.full_name.id_for_label }}">
+          {{ form.full_name.label }}
+          <small class="field-requirement">{% if form.full_name.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.full_name }}
+        {% if form.full_name.help_text %}<small class="help-text">{{ form.full_name.help_text }}</small>{% endif %}
+        {% for error in form.full_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.identification %}
+      <div class="field {% if form.identification.errors %}has-error{% endif %}">
+        <label for="{{ form.identification.id_for_label }}">
+          {{ form.identification.label }}
+          <small class="field-requirement">{% if form.identification.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.identification }}
+        {% if form.identification.help_text %}<small class="help-text">{{ form.identification.help_text }}</small>{% endif %}
+        {% for error in form.identification.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.hid_card_code %}
+      <div class="field {% if form.hid_card_code.errors %}has-error{% endif %}">
+        <label for="{{ form.hid_card_code.id_for_label }}">
+          {{ form.hid_card_code.label }}
+          <small class="field-requirement">{% if form.hid_card_code.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.hid_card_code }}
+        {% if form.hid_card_code.help_text %}<small class="help-text">{{ form.hid_card_code.help_text }}</small>{% endif %}
+        {% for error in form.hid_card_code.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+</section>
+
+<!-- Sección 02: Organización -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>02</span>
+    <div>
+      <h3>Organización</h3>
+      <p>Ubicación del empleado dentro de la estructura.</p>
+    </div>
+  </header>
+
+  <div class="employee-form-grid">
+    {% if form.position %}
+      <div class="field {% if form.position.errors %}has-error{% endif %}">
+        <label for="{{ form.position.id_for_label }}">
+          {{ form.position.label }}
+          <small class="field-requirement">{% if form.position.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.position }}
+        {% if form.position.help_text %}<small class="help-text">{{ form.position.help_text }}</small>{% endif %}
+        {% for error in form.position.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.management %}
+      <div class="field {% if form.management.errors %}has-error{% endif %}">
+        <label for="{{ form.management.id_for_label }}">
+          {{ form.management.label }}
+          <small class="field-requirement">{% if form.management.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.management }}
+        {% if form.management.help_text %}<small class="help-text">{{ form.management.help_text }}</small>{% endif %}
+        {% for error in form.management.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.department %}
+      <div class="field {% if form.department.errors %}has-error{% endif %}">
+        <label for="{{ form.department.id_for_label }}">
+          {{ form.department.label }}
+          <small class="field-requirement">Requerido</small>
+        </label>
+        <select name="{{ form.department.html_name }}" id="{{ form.department.id_for_label }}" data-department-select="true" required>
+          <option value="">Selecciona un departamento</option>
+          {% for department in form.department.field.queryset %}
+            <option value="{{ department.pk }}" data-management="{{ department.management_id }}" {% if form.department.value|stringformat:'s' == department.pk|stringformat:'s' %}selected{% endif %}>{{ department.name }}</option>
+          {% endfor %}
+        </select>
+        {% for error in form.department.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- Sección 03: Contacto y estado -->
+<section class="form-section">
+  <header class="form-section-title">
+    <span>03</span>
+    <div>
+      <h3>Contacto y estado</h3>
+      <p>Información adicional y disponibilidad.</p>
+    </div>
+  </header>
+
+  <div class="employee-form-grid">
+    {% if form.emergency_phone %}
+      <div class="field {% if form.emergency_phone.errors %}has-error{% endif %}">
+        <label for="{{ form.emergency_phone.id_for_label }}">
+          {{ form.emergency_phone.label }}
+          <small class="field-requirement">{% if form.emergency_phone.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.emergency_phone }}
+        {% if form.emergency_phone.help_text %}<small class="help-text">{{ form.emergency_phone.help_text }}</small>{% endif %}
+        {% for error in form.emergency_phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.emergency_contact_name %}
+      <div class="field {% if form.emergency_contact_name.errors %}has-error{% endif %}">
+        <label for="{{ form.emergency_contact_name.id_for_label }}">
+          {{ form.emergency_contact_name.label }}
+          <small class="field-requirement">{% if form.emergency_contact_name.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.emergency_contact_name }}
+        {% if form.emergency_contact_name.help_text %}<small class="help-text">{{ form.emergency_contact_name.help_text }}</small>{% endif %}
+        {% for error in form.emergency_contact_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.birthday %}
+      <div class="field {% if form.birthday.errors %}has-error{% endif %}">
+        <label for="{{ form.birthday.id_for_label }}">
+          {{ form.birthday.label }}
+          <small class="field-requirement">{% if form.birthday.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.birthday }}
+        {% if form.birthday.help_text %}<small class="help-text">{{ form.birthday.help_text }}</small>{% endif %}
+        {% for error in form.birthday.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.hire_date %}
+      <div class="field {% if form.hire_date.errors %}has-error{% endif %}">
+        <label for="{{ form.hire_date.id_for_label }}">
+          {{ form.hire_date.label }}
+          <small class="field-requirement">{% if form.hire_date.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.hire_date }}
+        {% if form.hire_date.help_text %}<small class="help-text">{{ form.hire_date.help_text }}</small>{% endif %}
+        {% for error in form.hire_date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    {% if form.status %}
+      <div class="field {% if form.status.errors %}has-error{% endif %}">
+        <label for="{{ form.status.id_for_label }}">
+          {{ form.status.label }}
+          <small class="field-requirement">{% if form.status.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+        </label>
+        {{ form.status }}
+        {% if form.status.help_text %}<small class="help-text">{{ form.status.help_text }}</small>{% endif %}
+        {% for error in form.status.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="field {% if form.workday_hours.errors %}has-error{% endif %}">
+      <label for="{{ form.workday_hours.id_for_label }}">Horas de jornada <small class="field-requirement">Opcional</small></label>
+      {{ form.workday_hours }}
+      {% for error in form.workday_hours.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </div>
+    <div class="field {% if form.punctuality_tolerance_minutes.errors %}has-error{% endif %}">
+      <label for="{{ form.punctuality_tolerance_minutes.id_for_label }}">Tolerancia de puntualidad (minutos) <small class="field-requirement">Opcional</small></label>
+      {{ form.punctuality_tolerance_minutes }}
+      {% for error in form.punctuality_tolerance_minutes.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- Sección 04: Fotografía -->
+<section class="form-section photo-section">
+  <header class="form-section-title">
+    <span>04</span>
+    <div>
+      <h3>Fotografía</h3>
+      <p>Imagen de identificación del empleado.</p>
+    </div>
+  </header>
+
+  {% if form.photo %}
+    <div class="photo-field field {% if form.photo.errors %}has-error{% endif %}">
+      <label for="{{ form.photo.id_for_label }}">
+        {{ form.photo.label }}
+        <small class="field-requirement">{% if form.photo.field.required %}Requerido{% else %}Opcional{% endif %}</small>
+      </label>
+      
+      <div class="photo-upload-row">
+        {% if editing_employee and editing_employee.photo %}
+          <img class="photo-preview" src="{{ editing_employee.photo.url }}" alt="Foto actual de {{ editing_employee.full_name }}">
+        {% else %}
+          <img class="photo-preview empty" src="" alt="Vista previa de la foto del empleado">
+        {% endif %}
+        
+        <div class="photo-upload-control">
+          {{ form.photo }}
+          <small class="help-text">JPG, PNG o WEBP · máximo 5 MB</small>
+        </div>
+      </div>
+      
+      {% for error in form.photo.errors %}
+        <small class="field-error">{{ error }}</small>
+      {% endfor %}
+    </div>
+  {% endif %}
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const management = document.querySelector('[data-management-select]');
+  const department = document.querySelector('[data-department-select]');
+  if (!management || !department) return;
+  const allDepartments = [...department.options].map((option) => ({ value: option.value, label: option.textContent, management: option.dataset.management }));
+  const refreshDepartments = () => {
+    const selected = department.value;
+    department.replaceChildren(new Option('Selecciona un departamento', ''));
+    allDepartments.filter((option) => option.value && option.management === management.value).forEach((option) => {
+      department.add(new Option(option.label, option.value));
+    });
+    if ([...department.options].some((option) => option.value === selected)) department.value = selected;
+  };
+  refreshDepartments();
+  management.addEventListener('change', refreshDepartments);
+});
+</script>

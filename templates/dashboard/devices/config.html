@@ -1,0 +1,355 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Dispositivos / Garita / Marcajix{% endblock %}
+{% block page_route %}1.01 / ADMINISTRACIÓN{% endblock %}
+{% block page_heading %}Dispositivos / Garita{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Configuración y estado del lector HID serial conectado al punto de acceso.</p>{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content device-config-page">
+
+    <div style="margin-bottom: 24px;">
+        <a class="button button-outline button-sm" href="{% url 'dashboard' %}">
+            <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Volver al resumen
+        </a>
+    </div>
+
+    <!-- Panel Principal de Configuración -->
+    <section class="admin-form device-config-panel" style="margin-top: 0;">
+        <header class="section-heading" style="margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+            <div>
+                <span class="section-number">1.01.1 / LECTOR HID</span>
+                <h2 style="margin: 4px 0 2px; font-size: 24px;">Conexión RS-232 / Serial</h2>
+                <p class="page-description">Los parámetros se aplican al siguiente ciclo de escucha del dispositivo.</p>
+            </div>
+            
+            <span id="port-status-badge" class="status {% if reader_status.level == 'success' %}active{% else %}inactive{% endif %}">
+                <i class="status-dot"></i>
+                {% if reader_status.level == 'success' %}Puerto listo{% elif reader_status.level == 'warning' %}Revisión requerida{% else %}Error de puerto{% endif %}
+            </span>
+        </header>
+
+        <!-- Banner de Diagnóstico del Puerto -->
+        <div id="port-status-banner" class="message {% if reader_status.level == 'success' %}message-success{% elif reader_status.level == 'warning' %}message-warning{% else %}message-error{% endif %}" style="margin-bottom: 28px;" role="status">
+            <strong id="port-status-message">{{ reader_status.message }}</strong>
+            {% if reader_status.devices %}
+                <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px;">
+                    {% for dev in reader_status.devices %}
+                        <span style="display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-sometype-mono); font-size: 11px; padding: 4px 10px; border-radius: 9999px; background: {% if dev.type == 'bluetooth' %}#fef2f2{% else %}#f0fdf4{% endif %}; border: 1px solid {% if dev.type == 'bluetooth' %}#fca5a5{% else %}#bbf7d0{% endif %}; color: {% if dev.type == 'bluetooth' %}#b91c1c{% else %}#166534{% endif %};">
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                                {% if dev.type == 'bluetooth' %}
+                                <circle cx="5" cy="5" r="4.5" stroke="currentColor" stroke-width="1"/>
+                                <text x="5" y="8" text-anchor="middle" font-size="7" fill="currentColor">B</text>
+                                {% else %}
+                                <rect x="1" y="3" width="8" height="4" rx="1" stroke="currentColor" stroke-width="1"/>
+                                <rect x="3" y="1" width="4" height="2" rx="0.5" stroke="currentColor" stroke-width="1"/>
+                                {% endif %}
+                            </svg>
+                            {{ dev.port }} · {{ dev.type_label }}
+                        </span>
+                    {% endfor %}
+                </div>
+            {% elif reader_status.available %}
+                <small style="display: block; margin-top: 4px; color: var(--color-slate, #646464);">Puertos serie detectados: {{ reader_status.available|join:", " }}</small>
+            {% else %}
+                <small style="display: block; margin-top: 4px; color: var(--color-slate, #646464);">No se encontraron dispositivos COM conectados.</small>
+            {% endif %}
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            {% if form.non_field_errors %}
+                <div class="form-error">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <!-- Sección 01: Identificación -->
+            <section class="form-section" style="margin-bottom: 28px;">
+                <header class="form-section-title" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <span class="section-number" style="font-size: 14px;">01</span>
+                    <div>
+                        <h3 style="margin: 0; font-family: var(--font-plus-jakarta-sans); font-size: 16px; font-weight: 700;">Identificación</h3>
+                        <p style="margin: 2px 0 0; font-size: 12px; color: var(--color-slate);">Nombre del punto de acceso y puerto asignado.</p>
+                    </div>
+                </header>
+
+                <div class="form-grid">
+                    {% for field in form %}
+                        {% if field.name == "name" or field.name == "port" %}
+                            <div class="field {% if field.errors %}has-error{% endif %}">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}<small class="help-text">{{ field.help_text }}</small>{% endif %}
+                                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- Sección 02: Comunicación Serial -->
+            <section class="form-section" style="margin-bottom: 28px;">
+                <header class="form-section-title" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <span class="section-number" style="font-size: 14px;">02</span>
+                    <div>
+                        <h3 style="margin: 0; font-family: var(--font-plus-jakarta-sans); font-size: 16px; font-weight: 700;">Parámetros de comunicación</h3>
+                        <p style="margin: 2px 0 0; font-size: 12px; color: var(--color-slate);">Velocidad de transmisión y bits de datos entregados por el lector HID.</p>
+                    </div>
+                </header>
+
+                <div class="form-grid">
+                    {% for field in form %}
+                        {% if field.name != "name" and field.name != "port" and field.name != "is_active" %}
+                            <div class="field {% if field.errors %}has-error{% endif %}">
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                {{ field }}
+                                {% if field.help_text %}<small class="help-text">{{ field.help_text }}</small>{% endif %}
+                                {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- Sección 03: Estado -->
+            <section class="form-section" style="margin-bottom: 24px;">
+                <header class="form-section-title" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                    <span class="section-number" style="font-size: 14px;">03</span>
+                    <div>
+                        <h3 style="margin: 0; font-family: var(--font-plus-jakarta-sans); font-size: 16px; font-weight: 700;">Habilitación</h3>
+                        <p style="margin: 2px 0 0; font-size: 12px; color: var(--color-slate);">Controla si la garita escucha activamente este dispositivo.</p>
+                    </div>
+                </header>
+
+                <div class="check-field">
+                    {{ form.is_active }}
+                    <label for="{{ form.is_active.id_for_label }}">Lector habilitado para recepción</label>
+                    {% for error in form.is_active.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+                </div>
+            </section>
+
+            <!-- Acciones -->
+            <footer class="form-actions" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button class="button button-outline" id="test-port-btn" type="button" title="Verifica que el puerto esté disponible en el sistema operativo">
+                        <svg class="button-icon" aria-hidden="true"><use href="#icon-check"/></svg> Verificar puerto
+                    </button>
+                    <button class="button button-outline" id="test-read-btn" type="button" title="Espera 10 segundos para leer una tarjeta real del lector">
+                        <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg> Leer tarjeta
+                    </button>
+                    <a class="button button-outline" href="{% url 'kiosk_garita' %}" target="_blank">
+                        Abrir modo kiosko <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
+                    </a>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <a class="button button-outline" href="{% url 'dashboard' %}">Cancelar</a>
+                    <button class="button button-accent" type="submit">Guardar configuración</button>
+                </div>
+            </footer>
+        </form>
+    </section>
+
+    <!-- Panel de resultado de prueba de lectura -->
+    <div id="read-test-panel" style="display: none; margin-top: 20px;">
+        <section class="admin-form" style="margin-top: 0; padding: 24px 28px;">
+            <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <span class="section-number" style="font-size: 12px;">DIAGNÓSTICO DE LECTURA</span>
+                    <h3 style="margin: 4px 0 0; font-family: var(--font-plus-jakarta-sans); font-size: 18px; font-weight: 800;">Prueba de lectura de tarjeta</h3>
+                </div>
+                <button id="close-read-panel" type="button" class="modal-close" aria-label="Cerrar panel">&times;</button>
+            </div>
+
+            <!-- Contador regresivo -->
+            <div id="read-countdown" style="display: none; text-align: center; padding: 28px 0;">
+                <div style="font-family: var(--font-sometype-mono); font-size: 48px; font-weight: 700; color: var(--color-brand-violet); line-height: 1;" id="countdown-number">10</div>
+                <p style="margin: 8px 0 0; color: var(--color-slate); font-size: 13px;">segundos esperando tarjeta en <strong id="countdown-port">COM3</strong>…</p>
+                <p style="margin: 4px 0 0; color: var(--color-ash); font-size: 12px;">Acerque una tarjeta al lector ahora</p>
+                <div style="margin: 20px auto 0; width: 200px; height: 4px; background: var(--color-bone); border-radius: 2px; overflow: hidden;">
+                    <div id="countdown-bar" style="height: 100%; background: var(--color-brand-violet); width: 100%; transition: width 1s linear;"></div>
+                </div>
+            </div>
+
+            <!-- Resultado -->
+            <div id="read-result" style="display: none;">
+                <div id="read-result-banner" class="message" role="alert" style="margin-bottom: 0;">
+                    <strong id="read-result-title"></strong>
+                    <p id="read-result-body" style="margin: 4px 0 0; font-size: 13px;"></p>
+                    <div id="read-card-display" style="display: none; margin-top: 12px; padding: 10px 14px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                        <span style="font-size: 11px; font-family: var(--font-sometype-mono); color: var(--color-slate); text-transform: uppercase; letter-spacing: 0.06em;">Código de tarjeta leído</span>
+                        <div id="read-card-code" style="font-family: var(--font-sometype-mono); font-size: 20px; font-weight: 700; color: #166534; margin-top: 4px; letter-spacing: 0.1em;"></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const CSRF = '{{ csrf_token }}';
+    const PORT_TEST_URL = '{% url "device_config_test" %}';
+    const READ_TEST_URL = '{% url "device_read_test" %}';
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    function setButtonWorking(btn, label) {
+        btn.disabled = true;
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = label;
+    }
+    function resetButton(btn) {
+        btn.disabled = false;
+        btn.innerHTML = btn.dataset.originalHtml || btn.innerHTML;
+    }
+
+    function levelClass(level) {
+        if (level === 'success') return 'message-success';
+        if (level === 'warning') return 'message-warning';
+        return 'message-error';
+    }
+    function badgeClass(level) {
+        return level === 'success' ? 'active' : 'inactive';
+    }
+    function badgeLabel(level) {
+        if (level === 'success') return 'Puerto listo';
+        if (level === 'warning') return 'Revisión requerida';
+        return 'Error de puerto';
+    }
+
+    function renderDevices(devices) {
+        if (!devices || !devices.length) return '';
+        return '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
+            devices.map(d => {
+                const isBt = d.type === 'bluetooth';
+                const bg = isBt ? '#fef2f2' : '#f0fdf4';
+                const border = isBt ? '#fca5a5' : '#bbf7d0';
+                const color = isBt ? '#b91c1c' : '#166534';
+                return `<span style="display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sometype-mono);font-size:11px;padding:4px 10px;border-radius:9999px;background:${bg};border:1px solid ${border};color:${color};">${d.port} · ${d.type_label}</span>`;
+            }).join('') +
+        '</div>';
+    }
+
+    function updatePortBanner(result) {
+        const banner = document.getElementById('port-status-banner');
+        const msg = document.getElementById('port-status-message');
+        const badge = document.getElementById('port-status-badge');
+        banner.className = 'message ' + levelClass(result.level);
+        msg.textContent = result.message;
+        banner.innerHTML = '<strong>' + result.message + '</strong>' + renderDevices(result.devices || []);
+        badge.className = 'status ' + badgeClass(result.level);
+        badge.innerHTML = '<i class="status-dot"></i> ' + badgeLabel(result.level);
+    }
+
+    // ── Verificar puerto (quick check) ──────────────────────────────────────
+    document.getElementById('test-port-btn').addEventListener('click', async function () {
+        const btn = this;
+        setButtonWorking(btn, 'Verificando…');
+        try {
+            const res = await fetch(PORT_TEST_URL, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+            updatePortBanner(data);
+        } catch {
+            updatePortBanner({ level: 'error', message: 'No se pudo contactar el servidor.', devices: [] });
+        } finally {
+            resetButton(btn);
+        }
+    });
+
+    // ── Leer tarjeta (blocking 10s read) ────────────────────────────────────
+    const readPanel    = document.getElementById('read-test-panel');
+    const countdown    = document.getElementById('read-countdown');
+    const resultDiv    = document.getElementById('read-result');
+    const resultBanner = document.getElementById('read-result-banner');
+    const resultTitle  = document.getElementById('read-result-title');
+    const resultBody   = document.getElementById('read-result-body');
+    const cardDisplay  = document.getElementById('read-card-display');
+    const cardCode     = document.getElementById('read-card-code');
+    const countNum     = document.getElementById('countdown-number');
+    const countBar     = document.getElementById('countdown-bar');
+    const countPort    = document.getElementById('countdown-port');
+
+    let countTimer = null;
+
+    function startCountdown(portName, seconds) {
+        countPort.textContent = portName;
+        countNum.textContent = seconds;
+        countBar.style.transition = 'none';
+        countBar.style.width = '100%';
+        // Force reflow before starting transition
+        void countBar.offsetWidth;
+        countBar.style.transition = `width ${seconds}s linear`;
+        countBar.style.width = '0%';
+        let remaining = seconds;
+        clearInterval(countTimer);
+        countTimer = setInterval(() => {
+            remaining -= 1;
+            countNum.textContent = remaining;
+            if (remaining <= 0) clearInterval(countTimer);
+        }, 1000);
+    }
+
+    function showReadResult(data) {
+        clearInterval(countTimer);
+        countdown.style.display = 'none';
+        resultDiv.style.display = 'block';
+        resultBanner.className = 'message ' + levelClass(data.level);
+        const titles = {
+            card_read: '✓ Tarjeta leída correctamente',
+            no_card: '— Tiempo agotado sin lectura',
+            port_locked: '✗ Puerto ocupado',
+            open_failed: '✗ No se pudo abrir el puerto',
+            read_error: '✗ Error durante la lectura',
+            dependency: '✗ pyserial no instalado',
+        };
+        resultTitle.textContent = titles[data.code] || (data.level === 'success' ? '✓ OK' : '✗ Error');
+        resultBody.textContent = data.message;
+        if (data.card_code) {
+            cardDisplay.style.display = 'block';
+            cardCode.textContent = data.card_code;
+        } else {
+            cardDisplay.style.display = 'none';
+        }
+    }
+
+    document.getElementById('test-read-btn').addEventListener('click', async function () {
+        const btn = this;
+        setButtonWorking(btn, 'Escuchando…');
+        readPanel.style.display = 'block';
+        countdown.style.display = 'block';
+        resultDiv.style.display = 'none';
+        cardDisplay.style.display = 'none';
+        // Read configured port from form field
+        const portField = document.getElementById('id_port');
+        const portName = portField ? portField.value : 'COM?';
+        startCountdown(portName, 10);
+        readPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        try {
+            const res = await fetch(READ_TEST_URL, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF, 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const data = await res.json();
+            showReadResult(data);
+        } catch (err) {
+            showReadResult({ level: 'error', code: 'open_failed', message: 'Error de red al contactar el servidor.', card_code: null });
+        } finally {
+            resetButton(btn);
+        }
+    });
+
+    document.getElementById('close-read-panel').addEventListener('click', function () {
+        clearInterval(countTimer);
+        readPanel.style.display = 'none';
+    });
+})();
+</script>
+{% endblock %}

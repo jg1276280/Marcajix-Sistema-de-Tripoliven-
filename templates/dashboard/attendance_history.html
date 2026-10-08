@@ -1,0 +1,197 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Historial de marcajes / Marcajix{% endblock %}
+{% block page_route %}1.04 / MARCAJES{% endblock %}
+{% block page_heading %}Historial de marcajes{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Consulta y filtra los eventos de entrada y salida registrados en el sistema.</p>{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content attendance-page attendance-history-page">
+
+    <!-- Barra de Filtros -->
+    <form class="attendance-filters" method="get" action="{% url 'attendance_history' %}">
+        
+        <div class="filter-group history-employee-filter">
+            <label for="filter-query">Empleados</label>
+            <div class="history-employee-search">
+                <input id="filter-query" type="search" autocomplete="off" placeholder="Busca por nombre, identificación o tarjeta...">
+                <div id="history-search-results" class="history-search-results" role="listbox" aria-label="Resultados de empleados" hidden></div>
+            </div>
+            <div id="history-selected-employees" class="history-selected-employees" aria-live="polite">
+                {% for employee in selected_employees %}
+                    <span class="history-employee-chip" data-id="{{ employee.pk }}">
+                        {{ employee.full_name }}<button type="button" class="history-chip-remove" aria-label="Quitar {{ employee.full_name }}">&times;</button>
+                        <input type="hidden" name="employee" value="{{ employee.pk }}">
+                    </span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label for="filter-from">Desde</label>
+            <input id="filter-from" type="date" name="from" value="{{ date_from }}">
+        </div>
+
+        <div class="filter-group">
+            <label for="filter-to">Hasta</label>
+            <input id="filter-to" type="date" name="to" value="{{ date_to }}">
+        </div>
+
+        <div class="filter-group">
+            <label for="filter-dept" class="visually-hidden">Departamento</label>
+            <select id="filter-dept" name="department">
+                <option value="">Todos los departamentos</option>
+                {% for item in departments %}
+                    <option value="{{ item }}" {% if department == item %}selected{% endif %}>
+                        {{ item }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-actions">
+            <button class="button button-accent" type="submit">Filtrar</button>
+            <a href="{% url 'attendance_history' %}" class="button button-outline button-clear" title="Limpiar filtros" aria-label="Limpiar filtros"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg><span class="button-text">Limpiar</span></a>
+        </div>
+    </form>
+
+    <!-- Tabla / Panel de Resultados -->
+    <section class="data-panel history-panel">
+        <div class="table-scroll">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Empleado</th>
+                        <th scope="col">Departamento</th>
+                        <th scope="col">Código de tarjeta</th>
+                        <th scope="col">Tipo</th>
+                        <th scope="col">Fecha y hora</th>
+                        <th scope="col">Registrado por</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in page_obj %}
+                        {% if event.kind == 'attempt' %}
+                        {% with attempt=event.record %}
+                        <tr>
+                            <td><div class="employee-cell"><strong>{{ attempt.employee.full_name|default:"Empleado eliminado" }}</strong></div></td>
+                            <td><span>{{ attempt.employee.department|default:"—" }}</span></td>
+                            <td><span>{{ attempt.employee.hid_card_code|default:"—" }}</span></td>
+                            <td><span class="attendance-anomaly-badge">Intento bloqueado</span></td>
+                            <td><time datetime="{{ attempt.attempted_at|date:'Y-m-d H:i:s' }}">{{ attempt.attempted_at|date:"d/m/Y H:i:s" }}</time></td>
+                            <td><span class="capture-pill">{{ attempt.reason }}{% if attempt.attempted_by %} · @{{ attempt.attempted_by.username }}{% endif %}</span></td>
+                        </tr>
+                        {% endwith %}
+                        {% else %}
+                        {% with log=event.record %}
+                        <tr>
+                            <td><div class="employee-cell"><strong>{{ log.employee.full_name }}</strong></div></td>
+                            <td><span>{{ log.employee.department|default:"—" }}</span></td>
+                            <td><span>{{ log.employee.hid_card_code|default:"—" }}</span></td>
+                            <td><span class="mark-pill {{ log.mark_type }}">{{ log.get_mark_type_display }}</span></td>
+                            <td><time datetime="{{ log.marked_at|date:'Y-m-d H:i:s' }}">{{ log.marked_at|date:"d/m/Y H:i:s" }}</time></td>
+                            <td><span class="capture-pill">{% if log.registered_by %}@{{ log.registered_by.username }}{% else %}Registro manual{% endif %}</span></td>
+                        </tr>
+                        {% endwith %}
+                        {% endif %}
+                    {% empty %}
+                        <tr>
+                            <td class="empty-state" colspan="6">
+                                No se encontraron marcajes para los filtros seleccionados.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Paginador General -->
+        {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="pagination-container" aria-label="Navegación del historial">
+                <div class="pagination-info">
+                    Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+                </div>
+                
+                <div class="pagination-actions">
+                    {% if page_obj.has_previous %}
+                        <a class="button button-outline button-sm" 
+                           href="?page={{ page_obj.previous_page_number }}{% for employee_id in employee_ids %}&employee={{ employee_id }}{% endfor %}&from={{ date_from }}&to={{ date_to }}&department={{ department }}">
+                            <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Anterior
+                        </a>
+                    {% endif %}
+
+                    {% if page_obj.has_next %}
+                        <a class="button button-outline button-sm" 
+                           href="?page={{ page_obj.next_page_number }}{% for employee_id in employee_ids %}&employee={{ employee_id }}{% endfor %}&from={{ date_from }}&to={{ date_to }}&department={{ department }}">
+                            Siguiente <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
+                        </a>
+                    {% endif %}
+                </div>
+            </nav>
+        {% endif %}
+    </section>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const search = document.getElementById('filter-query');
+    const results = document.getElementById('history-search-results');
+    const selected = document.getElementById('history-selected-employees');
+    if (!search || !results || !selected) return;
+
+    const selectedIds = () => new Set([...selected.querySelectorAll('input[name="employee"]')].map((input) => input.value));
+    const renderResults = (employees) => {
+        const ids = selectedIds();
+        results.innerHTML = employees.map((employee) => `
+            <button type="button" class="history-search-result ${ids.has(String(employee.id)) ? 'is-selected' : ''}" data-id="${employee.id}" data-name="${employee.name}">
+                <span><strong>${employee.name}</strong><small>${employee.hid_card_code} · ${employee.department}</small></span>
+                <span>${ids.has(String(employee.id)) ? 'Seleccionado' : 'Seleccionar'}</span>
+            </button>
+        `).join('') || '<p class="history-search-empty">No encontramos empleados.</p>';
+        results.hidden = false;
+    };
+
+    let timer;
+    search.addEventListener('input', () => {
+        clearTimeout(timer);
+        const query = search.value.trim();
+        if (!query) { results.hidden = true; return; }
+        timer = setTimeout(async () => {
+            try {
+                const response = await fetch(`{% url 'attendance_employee_search' %}?include_inactive=1&q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                renderResults(data.employees || []);
+            } catch (error) {
+                results.innerHTML = '<p class="history-search-empty">No se pudo consultar el personal.</p>';
+                results.hidden = false;
+            }
+        }, 180);
+    });
+
+    results.addEventListener('click', (event) => {
+        const button = event.target.closest('.history-search-result');
+        if (!button || selectedIds().has(button.dataset.id)) return;
+        const chip = document.createElement('span');
+        chip.className = 'history-employee-chip';
+        chip.dataset.id = button.dataset.id;
+        chip.innerHTML = `${button.dataset.name}<button type="button" class="history-chip-remove" aria-label="Quitar ${button.dataset.name}">&times;</button><input type="hidden" name="employee" value="${button.dataset.id}">`;
+        selected.appendChild(chip);
+        search.value = '';
+        results.hidden = true;
+        search.focus();
+    });
+
+    selected.addEventListener('click', (event) => {
+        const remove = event.target.closest('.history-chip-remove');
+        if (remove) remove.closest('.history-employee-chip').remove();
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.history-employee-filter')) results.hidden = true;
+    });
+});
+</script>
+{% endblock %}

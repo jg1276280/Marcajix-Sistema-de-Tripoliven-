@@ -1,0 +1,72 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Estructura / Marcajix{% endblock %}
+{% block page_route %}2.03 / ADMINISTRACIÓN{% endblock %}
+{% block page_heading %}Estructura organizativa{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Gerencias y departamentos del equipo</p>{% endblock %}
+{% block extra_css %}{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content employees-page">
+
+  <div class="structure-grid">
+    <section class="data-panel structure-panel">
+      <header class="structure-panel-heading"><div><span class="section-number">NIVEL 01</span><h3>Gerencias</h3></div></header>
+      <form method="post" class="structure-form">
+        {% csrf_token %}<input type="hidden" name="action" value="management_create">
+        {{ management_form.name }}
+        {% for error in management_form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        <button class="button button-accent" type="submit">Agregar gerencia</button>
+      </form>
+      <ul class="structure-list">
+        {% for management in managements %}
+          <li class="structure-item">
+            <form method="post" class="structure-edit-form">
+              {% csrf_token %}<input type="hidden" name="action" value="management_update"><input type="hidden" name="pk" value="{{ management.pk }}">
+              <input type="text" name="name" value="{{ management.name }}" aria-label="Nombre de {{ management.name }}" required>
+              <button class="icon-action" type="submit" aria-label="Guardar cambios en {{ management.name }}" title="Guardar"><svg aria-hidden="true"><use href="#icon-save"/></svg></button>
+            </form>
+            {% if editing_management and editing_structure_pk == management.pk %}<small class="structure-error">{{ structure_edit_form.name.errors|striptags }}</small>{% endif %}
+            <span>{{ management.departments.all|length }} departamento{{ management.departments.all|length|pluralize:"s" }}</span>
+            <form method="post" class="structure-delete-form">
+              {% csrf_token %}<input type="hidden" name="action" value="management_delete"><input type="hidden" name="pk" value="{{ management.pk }}">
+              <button class="icon-action danger" type="submit" aria-label="Eliminar gerencia {{ management.name }}" title="{% if management.department_count or management.employee_count %}Tiene datos vinculados{% else %}Eliminar{% endif %}" {% if management.department_count or management.employee_count %}disabled{% else %}onclick="return confirm('¿Eliminar esta gerencia?')"{% endif %}><svg aria-hidden="true"><use href="#icon-trash"/></svg></button>
+            </form>
+          </li>
+        {% empty %}<li class="structure-empty">No hay gerencias configuradas.</li>{% endfor %}
+      </ul>
+    </section>
+
+    <section class="data-panel structure-panel">
+      <header class="structure-panel-heading"><div><span class="section-number">NIVEL 02</span><h3>Departamentos</h3></div></header>
+      <form method="post" class="structure-form">
+        {% csrf_token %}<input type="hidden" name="action" value="department_create">
+        {{ department_form.management }}
+        {{ department_form.name }}
+        {% for error in department_form.management.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        {% for error in department_form.name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        <button class="button button-accent" type="submit">Agregar departamento</button>
+      </form>
+      <ul class="structure-list">
+        {% for management in managements %}
+          {% for department in management.departments.all %}
+            <li class="structure-item">
+              <form method="post" class="structure-edit-form">
+                {% csrf_token %}<input type="hidden" name="action" value="department_update"><input type="hidden" name="pk" value="{{ department.pk }}">
+                <input type="text" name="name" value="{{ department.name }}" aria-label="Nombre de {{ department.name }}" required>
+                <button class="icon-action" type="submit" aria-label="Guardar cambios en {{ department.name }}" title="Guardar"><svg aria-hidden="true"><use href="#icon-save"/></svg></button>
+              </form>
+              {% if editing_department and editing_structure_pk == department.pk %}<small class="structure-error">{{ structure_edit_form.name.errors|striptags }}</small>{% endif %}
+              <span>{{ management.name }}</span>
+              <form method="post" class="structure-delete-form">
+                {% csrf_token %}<input type="hidden" name="action" value="department_delete"><input type="hidden" name="pk" value="{{ department.pk }}">
+                <button class="icon-action danger" type="submit" aria-label="Eliminar departamento {{ department.name }}" title="{% if department.employees.count %}Tiene empleados vinculados{% else %}Eliminar{% endif %}" {% if department.employees.count %}disabled{% else %}onclick="return confirm('¿Eliminar este departamento?')"{% endif %}><svg aria-hidden="true"><use href="#icon-trash"/></svg></button>
+              </form>
+            </li>
+          {% endfor %}
+        {% empty %}<li class="structure-empty">No hay departamentos configurados.</li>{% endfor %}
+      </ul>
+    </section>
+  </div>
+</div>
+{% endblock %}

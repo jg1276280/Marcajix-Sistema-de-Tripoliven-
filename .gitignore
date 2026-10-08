@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.env
+.venv/
+staticfiles/
+media/
+test-media/
+.DS_Store

@@ -1,0 +1,327 @@
+from django.contrib.auth.models import User
+from django.conf import settings
+from django.test import TestCase, override_settings
+from django.db.models.deletion import ProtectedError
+from django.urls import reverse
+from django.utils import timezone
+from datetime import date, timedelta
+import json
+import time
+from employees.forms import EmployeeForm
+from employees.models import Department, Employee, Management
+from .forms import LoginForm
+from .models import UserSecurity, AttendanceAttempt, AttendanceLog
+from .services import AttendanceRegistrationError, register_manual_entry
+from core.test_utils import create_test_image as attendance_image
+
+
+@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+class AuthenticationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="login-user", password="ValidPassword123!")
+
+    def test_valid_login_resets_failed_attempts(self):
+        UserSecurity.objects.create(user=self.user, failed_login_attempts=2)
+        response = self.client.post("/login/", {"username": "login-user", "password": "ValidPassword123!"})
+        self.assertRedirects(response, "/dashboard/")
+        self.assertEqual(UserSecurity.objects.get(user=self.user).failed_login_attempts, 0)
+
+    def test_authenticated_session_is_not_persistent_in_the_browser(self):
+        self.client.login(username="login-user", password="ValidPassword123!")
+
+        response = self.client.get("/dashboard/")
+
+        self.assertEqual(response.status_code, 200)
+        session_cookie = response.cookies.get(settings.SESSION_COOKIE_NAME)
+        self.assertIsNotNone(session_cookie)
+        self.assertEqual(session_cookie["max-age"], "")
+
+    def test_session_older_than_twelve_hours_redirects_to_login(self):
+        self.client.login(username="login-user", password="ValidPassword123!")
+        session = self.client.session
+        session["_marcajix_session_started_at"] = int(time.time()) - settings.SESSION_MAX_AGE - 1
+        session.save()
+
+        response = self.client.get("/dashboard/")
+
+        self.assertRedirects(response, "/login/?next=/dashboard/")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_third_failed_login_deactivates_account(self):
+        for _ in range(3):
+            form = LoginForm(data={"username": "login-user", "password": "WrongPassword123!"})
+            self.assertFalse(form.is_valid())
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.is_active)
+        self.assertEqual(self.user.security.failed_login_attempts, 3)
+
+
+@override_settings(MEDIA_ROOT="test-media", STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+class AttendanceTests(TestCase):
+    def setUp(self):
+        from employees.models import Department, Employee, Management
+
+        self.management = Management.objects.create(name="Tecnología")
+        self.department = Department.objects.create(name="Sistemas", management=self.management)
+        self.employee = Employee.objects.create(full_name="Ana Pérez", identification="31395897", position="Analista", department=self.department, management=self.management, photo=attendance_image())
+        self.user = User.objects.create_user(username="attendance-user", password="ValidPassword123!")
+
+    def test_database_protects_employee_with_attendance_history(self):
+        register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        with self.assertRaises(ProtectedError):
+            self.employee.delete()
+
+    def test_register_endpoint_returns_employee_data(self):
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["employee"], "Ana Pérez")
+
+    def test_manual_endpoint_records_authenticated_user(self):
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
+        self.assertEqual(response.status_code, 201)
+        log = AttendanceLog.objects.get()
+        self.assertEqual(log.capture_mode, AttendanceLog.MANUAL)
+        self.assertEqual(log.registered_by, self.user)
+
+    def test_endpoint_rejects_non_manual_capture(self):
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "hid", "rows": "[]"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Marcajix solo permite registros manuales.")
+
+    def test_manual_endpoint_handles_malformed_rows_without_500(self):
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}, "broken-row"])})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(len(response.json()["errors"]), 1)
+
+    def test_manual_endpoint_registers_multiple_employees(self):
+        from employees.models import Department, Employee, Management
+
+        operations = Management.objects.create(name="Operaciones")
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("second.png"))
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{ "employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}, {"employee_id": second_employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["count"], 2)
+        self.assertEqual(AttendanceLog.objects.count(), 2)
+
+    def test_manual_endpoint_rejects_dates_outside_72_hours(self):
+        self.client.force_login(self.user)
+        old_date = (timezone.now() - timedelta(hours=73)).isoformat()
+        future_date = (timezone.now() + timedelta(minutes=1)).isoformat()
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": old_date}, {"employee_id": self.employee.pk, "mark_type": "exit", "marked_at": future_date}])})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(len(response.json()["errors"]), 2)
+        self.assertEqual(AttendanceLog.objects.count(), 0)
+
+    def test_manual_endpoint_processes_valid_rows_and_returns_invalid_rows(self):
+        from employees.models import Department, Employee, Management
+
+        operations = Management.objects.create(name="Operaciones")
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("partial.png"))
+        self.client.force_login(self.user)
+        valid_date = timezone.now().isoformat()
+        invalid_date = (timezone.now() - timedelta(hours=73)).isoformat()
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": valid_date}, {"employee_id": second_employee.pk, "mark_type": "entry", "marked_at": invalid_date}])})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(response.json()["successes"]), 1)
+        self.assertEqual(len(response.json()["errors"]), 1)
+        self.assertEqual(AttendanceLog.objects.count(), 1)
+
+    def test_vacation_employee_registers_with_warning(self):
+        self.employee.status = self.employee.VACATION
+        self.employee.save(update_fields=["status", "updated_at"])
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(AttendanceLog.objects.count(), 1)
+        self.assertEqual(response.json()["warnings"][0]["employee_id"], self.employee.pk)
+
+    def test_blocked_employee_creates_attempt_and_audit_without_attendance(self):
+        from django.contrib.admin.models import LogEntry
+
+        self.employee.status = self.employee.INACTIVE
+        self.employee.save(update_fields=["status", "updated_at"])
+        self.client.force_login(self.user)
+        response = self.client.post("/dashboard/marcajes/registrar/", {"capture_mode": "manual", "rows": json.dumps([{"employee_id": self.employee.pk, "mark_type": "entry", "marked_at": timezone.now().isoformat()}])})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["errors"][0]["code"], "blocked")
+        self.assertEqual(AttendanceLog.objects.count(), 0)
+        attempt = AttendanceAttempt.objects.get()
+        self.assertEqual(attempt.employee_status, self.employee.INACTIVE)
+        self.assertEqual(attempt.attempted_by, self.user)
+        self.assertTrue(LogEntry.objects.filter(object_id=attempt.pk, change_message__contains="estatus Inactivo").exists())
+
+    def test_exit_remains_allowed_for_an_open_session_even_when_status_changes(self):
+        register_manual_entry(self.employee.pk, timezone.now() - timedelta(minutes=30), AttendanceLog.ENTRY)
+        self.employee.status = self.employee.INACTIVE
+        self.employee.save(update_fields=["status", "updated_at"])
+
+        exit_log = register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.EXIT)
+
+        self.assertEqual(exit_log.mark_type, AttendanceLog.EXIT)
+        self.assertEqual(AttendanceLog.objects.filter(employee=self.employee).count(), 2)
+
+    def test_historical_marks_are_validated_against_their_chronological_session(self):
+        today = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        yesterday_entry = today - timedelta(days=1, hours=1)
+        yesterday_exit = today - timedelta(days=1, minutes=1)
+
+        register_manual_entry(self.employee.pk, today, AttendanceLog.ENTRY)
+        entry_log = register_manual_entry(self.employee.pk, yesterday_entry, AttendanceLog.ENTRY)
+        exit_log = register_manual_entry(self.employee.pk, yesterday_exit, AttendanceLog.EXIT)
+
+        self.assertEqual(entry_log.marked_at, yesterday_entry)
+        self.assertEqual(exit_log.marked_at, yesterday_exit)
+        self.assertEqual(AttendanceLog.objects.filter(employee=self.employee).count(), 3)
+
+    def test_historical_exit_without_historical_entry_is_rejected(self):
+        marked_at = timezone.now() - timedelta(days=1)
+
+        with self.assertRaises(AttendanceRegistrationError) as context:
+            register_manual_entry(self.employee.pk, marked_at, AttendanceLog.EXIT)
+
+        self.assertEqual(context.exception.code, "exit_without_entry")
+
+    def test_employee_search_returns_active_matches(self):
+        self.client.force_login(self.user)
+        response = self.client.get("/dashboard/marcajes/empleados/?q=Ana")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["employees"][0]["name"], "Ana Pérez")
+
+    def test_employee_search_matches_card_code(self):
+        self.employee.hid_card_code = "CARD-ATT-001"
+        self.employee.save(update_fields=["hid_card_code", "updated_at"])
+        self.client.force_login(self.user)
+        response = self.client.get("/dashboard/marcajes/empleados/?q=CARD-ATT-001")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["employees"][0]["id"], self.employee.pk)
+
+    def test_attendance_page_does_not_preload_unused_attendance_data(self):
+        self.client.force_login(self.user)
+        with self.assertNumQueries(5):
+            response = self.client.get("/dashboard/marcajes/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_employee_search_uses_bounded_queries_for_last_mark(self):
+        from employees.models import Department, Employee, Management
+
+        operations = Management.objects.create(name="Operaciones")
+        second_employee = Employee.objects.create(full_name="Luis Torres", identification="31395898", position="Analista", department=Department.objects.create(name="Finanzas", management=operations), management=operations, photo=attendance_image("query-count.png"))
+        register_manual_entry(self.employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        register_manual_entry(second_employee.pk, timezone.now(), AttendanceLog.ENTRY)
+        self.client.force_login(self.user)
+        with self.assertNumQueries(6):
+            response = self.client.get("/dashboard/marcajes/empleados/?q=")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["employees"][0]["last_mark"], "Entrada")
+
+    def test_employee_history_link_returns_all_paginated_events(self):
+        from datetime import datetime, timedelta
+
+        for offset in range(26):
+            AttendanceLog.objects.create(
+                employee=self.employee,
+                marked_at=timezone.make_aware(datetime(2026, 1, 1) + timedelta(days=offset)),
+                mark_type=AttendanceLog.ENTRY if offset % 2 == 0 else AttendanceLog.EXIT,
+            )
+        self.client.force_login(self.user)
+
+        response = self.client.get(f"/dashboard/marcajes/historial/?employee={self.employee.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["date_from"], "")
+        self.assertEqual(response.context["date_to"], "")
+        self.assertEqual(response.context["page_obj"].paginator.count, 26)
+        self.assertEqual(response.context["page_obj"].paginator.num_pages, 2)
+
+
+@override_settings(STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}})
+class DataIntegrityTests(TestCase):
+    def setUp(self):
+        self.management = Management.objects.create(name="Operaciones")
+        self.department = Department.objects.create(name="Logística", management=self.management)
+
+    def _employee_payload(self, **overrides):
+        payload = {
+            "full_name": "Laura Gómez",
+            "identification": "12345678",
+            "hid_card_code": "CARD-001",
+            "position": "Analista",
+            "department": self.department.pk,
+            "management": self.management.pk,
+            "hire_date": date.today().isoformat(),
+            "workday_hours": "9.00",
+            "punctuality_tolerance_minutes": "15",
+            "emergency_phone": "8091234567",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_employee_form_requires_hire_date_and_blocks_future_date(self):
+        invalid_blank = EmployeeForm(data=self._employee_payload(hire_date=""))
+        self.assertFalse(invalid_blank.is_valid())
+        self.assertIn("hire_date", invalid_blank.errors)
+
+        future_date = (date.today() + timedelta(days=1)).isoformat()
+        invalid_future = EmployeeForm(data=self._employee_payload(hire_date=future_date))
+        self.assertFalse(invalid_future.is_valid())
+        self.assertIn("hire_date", invalid_future.errors)
+
+    def test_duplicate_card_code_is_rejected(self):
+        Employee.objects.create(
+            full_name="Ana Pérez",
+            identification="31395897",
+            hid_card_code="CARD-001",
+            position="Analista",
+            department=self.department,
+            management=self.management,
+            photo=attendance_image("card-one.png"),
+            hire_date=date.today(),
+        )
+        form = EmployeeForm(data=self._employee_payload(identification="31395898", hid_card_code="card-001"))
+        self.assertFalse(form.is_valid())
+        self.assertIn("hid_card_code", form.errors)
+
+    def test_duplicate_entry_within_two_minutes_is_rejected(self):
+        employee = Employee.objects.create(
+            full_name="Rosa López",
+            identification="31395899",
+            hid_card_code="CARD-002",
+            position="Analista",
+            department=self.department,
+            management=self.management,
+            photo=attendance_image("card-two.png"),
+            hire_date=date.today(),
+        )
+        now = timezone.now()
+        register_manual_entry(employee.pk, now, AttendanceLog.ENTRY)
+        with self.assertRaises(AttendanceRegistrationError):
+            register_manual_entry(employee.pk, now + timedelta(seconds=30), AttendanceLog.ENTRY)
+
+    def test_employee_detail_ignores_incomplete_session_when_building_hours(self):
+        employee = Employee.objects.create(
+            full_name="Miguel Silva",
+            identification="31395900",
+            hid_card_code="CARD-003",
+            position="Analista",
+            department=self.department,
+            management=self.management,
+            photo=attendance_image("card-three.png"),
+            hire_date=date.today(),
+        )
+        self.client.force_login(User.objects.create_user(username="detail-checker", password="ValidPassword123!"))
+        AttendanceLog.objects.create(
+            employee=employee,
+            marked_at=timezone.now() - timedelta(hours=2),
+            mark_type=AttendanceLog.ENTRY,
+            session_status=AttendanceLog.SESSION_INCOMPLETE,
+        )
+        response = self.client.get(reverse("employees:detail", args=[employee.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_hours"], 0)
+        self.assertTrue(response.context["open_session"])

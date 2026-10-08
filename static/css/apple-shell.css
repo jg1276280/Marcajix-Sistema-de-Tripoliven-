@@ -1,0 +1,347 @@
+/* Marcajix - ClickUp Premium Design System (DESIGN.md) */
+:root {
+  --color-signal-white: #ffffff;
+  --color-ink-black: #202020;
+  --color-onyx: #090c1d;
+  --color-carbon: #2a2a2a;
+  --color-slate: #646464;
+  --color-ash: #838383;
+  --color-fog: #b3b3b3;
+  --color-cloud: #d4d4d4;
+  --color-bone: #e8e8e8;
+  --color-mist: #f8f9fa;
+  --color-plaster: #e9ebf0;
+  --color-brand-violet: #6647f0;
+  --color-signal-blue: #0091ff;
+
+  --font-plus-jakarta-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sometype-mono: 'Sometype Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --apple-bg: var(--color-signal-white, #ffffff);
+  --apple-sidebar: #ffffff;
+  --apple-surface: #ffffff;
+  --apple-border: var(--color-bone, #e8e8e8);
+  --apple-text: var(--color-ink-black, #202020);
+  --apple-muted: var(--color-slate, #646464);
+  --apple-accent: var(--color-brand-violet, #6647f0);
+  --apple-radius: 12px;
+  --apple-shadow: 0 4px 20px rgba(9, 12, 29, 0.04);
+}
+
+body.dashboard-page {
+  background: var(--apple-bg);
+  color: var(--apple-text);
+  font-family: var(--font-inter);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* SVG Icon Strict Dimension Fixes */
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+svg {
+  max-width: 100%;
+}
+
+.nav-icon, .button-icon, .icon-action svg, .view-switch-button svg, .profile-chevron {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  box-sizing: content-box;
+}
+
+.nav-icon {
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
+  min-height: 18px !important;
+  max-width: 18px !important;
+  max-height: 18px !important;
+  flex: 0 0 18px !important;
+  display: inline-block !important;
+  color: currentColor;
+}
+
+.button-icon {
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  max-width: 15px !important;
+  max-height: 15px !important;
+  flex: 0 0 15px !important;
+  vertical-align: -2px;
+  display: inline-block !important;
+}
+
+.profile-chevron {
+  width: 14px !important;
+  height: 14px !important;
+  min-width: 14px !important;
+  min-height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  flex: 0 0 14px !important;
+  margin-left: 8px;
+  display: inline-block !important;
+}
+
+.page-header {
+  margin-right: auto;
+  min-width: 0;
+}
+.page-route {
+  color: var(--color-ash);
+  font-family: var(--font-sometype-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.page-header h1 {
+  margin: 4px 0 0;
+  color: var(--color-onyx);
+  font-family: var(--font-plus-jakarta-sans);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+.page-subtitle {
+  margin: 4px 0 0;
+  color: var(--apple-muted);
+  font-family: var(--font-inter);
+  font-size: 13px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Sidebar Layout */
+.dashboard-page .sidebar {
+  width: 236px;
+  padding: 24px 14px 20px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--apple-sidebar);
+  border-right: 1px solid var(--apple-border);
+  box-sizing: border-box;
+}
+
+.dashboard-page .dashboard-main {
+  margin-left: 236px;
+  width: calc(100% - 236px);
+  box-sizing: border-box;
+}
+
+.dashboard-page .brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-start;
+  margin: 2px 10px 28px;
+  font-family: var(--font-plus-jakarta-sans);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-onyx);
+  text-decoration: none;
+}
+
+.dashboard-page .side-label {
+  margin: 22px 10px 8px;
+  color: var(--color-ash);
+  font-family: var(--font-sometype-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dashboard-page .nav-link {
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  padding: 0 14px;
+  border-radius: 9999px;
+  color: var(--apple-muted);
+  font-family: var(--font-plus-jakarta-sans);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+.dashboard-page .nav-link:hover {
+  background: var(--color-mist);
+  color: var(--apple-text);
+}
+.dashboard-page .nav-link.active {
+  background: var(--color-ink-black);
+  color: #ffffff;
+  font-weight: 700;
+}
+.dashboard-page .nav-link.active .nav-icon {
+  color: #ffffff !important;
+}
+
+/* Topbar Header & Profile Chip */
+.dashboard-page .topbar {
+  padding: 20px 36px;
+  min-height: 90px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--apple-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+}
+
+.dashboard-page .profile-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  height: 44px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid var(--apple-border);
+  border-radius: 9999px;
+  cursor: pointer;
+  max-width: 240px;
+}
+.dashboard-page .profile-chip .avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 50%;
+  background: var(--color-brand-violet);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-plus-jakarta-sans);
+  font-weight: 800;
+  font-size: 13px;
+}
+.dashboard-page .profile-chip strong {
+  font-family: var(--font-plus-jakarta-sans);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--color-onyx);
+}
+.dashboard-page .profile-chip small {
+  font-family: var(--font-inter);
+  font-size: 11px;
+  color: var(--apple-muted);
+}
+
+.dashboard-page .dashboard-content {
+  width: min(calc(100% - 72px), 1160px);
+  padding: 32px 0 56px;
+  margin: 0 auto;
+}
+.dashboard-page .section-heading h2 {
+  font-family: var(--font-plus-jakarta-sans);
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--color-onyx);
+  margin: 4px 0;
+}
+.dashboard-page .section-heading {
+  margin-bottom: 22px;
+}
+
+/* Cards & Tables */
+.dashboard-page .data-panel, .dashboard-page .attendance-filters, .dashboard-page .audit-filters {
+  border-radius: var(--apple-radius);
+  box-shadow: var(--apple-shadow);
+}
+.dashboard-page .data-panel {
+  background: var(--apple-surface);
+  border: 1px solid var(--apple-border);
+  overflow: hidden;
+}
+.dashboard-page .data-table th {
+  background: var(--color-mist);
+  color: var(--color-ash);
+  font-family: var(--font-sometype-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 16px;
+}
+.dashboard-page .data-table td {
+  border-color: var(--apple-border);
+  padding: 14px 16px;
+  font-family: var(--font-inter);
+}
+.dashboard-page .data-table tbody tr:hover {
+  background: var(--color-mist);
+}
+
+.dashboard-page .employee-card,
+.dashboard-page .profile-card,
+.dashboard-page .welcome-panel,
+.dashboard-page .stat-card,
+.dashboard-page .structure-panel,
+.dashboard-page .employee-file {
+  border: 1px solid var(--apple-border);
+  border-radius: var(--apple-radius);
+  box-shadow: var(--apple-shadow);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.dashboard-page .employee-card:hover,
+.dashboard-page .profile-card:hover,
+.dashboard-page .structure-panel:hover,
+.dashboard-page .employee-file:hover {
+  border-color: var(--color-cloud);
+  box-shadow: 0 8px 30px rgba(9, 12, 29, 0.08);
+  transform: translateY(-2px);
+}
+
+.dashboard-page .modal-card {
+  border: 1px solid var(--apple-border);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(9, 12, 29, 0.18);
+  background: #ffffff;
+}
+
+@media (max-width: 700px) {
+  .dashboard-page .sidebar {
+    display: none;
+  }
+  .dashboard-page .dashboard-main {
+    margin-left: 0;
+    width: 100%;
+  }
+  .dashboard-page .topbar {
+    padding: 16px;
+  }
+  .page-header h1 {
+    font-size: 22px;
+  }
+}

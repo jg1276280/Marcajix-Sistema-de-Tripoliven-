@@ -1,0 +1,401 @@
+{% load static %}{% csrf_token %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modo Kiosko / Marcajix</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Sometype+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/ui-bundle.css' %}">
+  <style>
+    :root {
+      --color-signal-white: #ffffff;
+      --color-ink-black: #202020;
+      --color-onyx: #090c1d;
+      --color-slate: #646464;
+      --color-ash: #838383;
+      --color-bone: #e8e8e8;
+      --color-mist: #f8f9fa;
+      --color-brand-violet: #6647f0;
+      --color-signal-blue: #0091ff;
+
+      --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+      --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+      --font-mono: 'Sometype Mono', ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: var(--color-ink-black);
+      font-family: var(--font-inter);
+      -webkit-font-smoothing: antialiased;
+    }
+    .kiosk {
+      min-height: 100vh;
+      padding: 32px 48px;
+      display: flex;
+      flex-direction: column;
+    }
+    .kiosk-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      color: var(--color-onyx);
+    }
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      grid-template-columns: repeat(2, 9px);
+      grid-template-rows: repeat(2, 9px);
+      gap: 2px;
+      transform: rotate(45deg);
+    }
+    .brand-mark i {
+      display: block;
+      background: var(--color-brand-violet);
+      border-radius: 2px;
+    }
+    .brand-mark i:nth-child(2),
+    .brand-mark i:nth-child(3) {
+      background: var(--color-signal-blue);
+    }
+    .partner {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-ash);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .lock {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--color-bone);
+      border-radius: 9999px;
+      background: #ffffff;
+      color: var(--color-slate);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .lock:hover {
+      border-color: var(--color-signal-blue);
+      background: var(--color-mist);
+      color: var(--color-signal-blue);
+    }
+    .lock-icon {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .kiosk-main {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      text-align: center;
+    }
+    .clock {
+      font-family: var(--font-display);
+      font-variant-numeric: tabular-nums;
+      font-size: clamp(48px, 9vw, 100px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--color-onyx);
+      margin-bottom: 24px;
+    }
+    .idle h1 {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 4vw, 54px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--color-onyx);
+      margin: 0 0 12px;
+    }
+    .idle p {
+      color: var(--color-slate);
+      font-size: clamp(15px, 1.8vw, 20px);
+      margin: 0;
+    }
+
+    .confirm {
+      display: none;
+      width: min(100%, 600px);
+      padding: 40px;
+      border: 1px solid var(--color-bone);
+      border-radius: 20px;
+      background: #ffffff;
+      box-shadow: 0 16px 50px rgba(9, 12, 29, 0.08);
+      animation: rise 0.35s cubic-bezier(0.33, 1, 0.68, 1) both;
+    }
+    .confirm.is-visible {
+      display: block;
+    }
+    .confirm-photo {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--color-mist);
+      border: 2px solid var(--color-bone);
+      margin: 0 auto 20px;
+    }
+    .confirm h2 {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--color-onyx);
+    }
+    .confirm p {
+      margin: 6px;
+      color: var(--color-slate);
+      font-size: 14px;
+    }
+    .mark-badge {
+      display: inline-block;
+      margin-top: 20px;
+      padding: 6px 18px;
+      border-radius: 9999px;
+      background: #ecfdf5;
+      color: #047857;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    /* Modal de Desbloqueo Administrador */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 12, 29, 0.45);
+      backdrop-filter: blur(8px);
+      place-items: center;
+      padding: 24px;
+      z-index: 100;
+    }
+    .modal.is-open {
+      display: grid;
+    }
+    .modal-card {
+      width: min(100%, 420px);
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
+      background: #ffffff;
+      border: 1px solid var(--color-bone);
+      border-radius: 16px;
+      padding: 36px;
+      text-align: left;
+      box-shadow: 0 24px 60px rgba(9, 12, 29, 0.18);
+    }
+    .modal-card h2 {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      color: var(--color-onyx);
+    }
+    .modal-card p {
+      color: var(--color-slate);
+      font-size: 13px;
+      margin: 0 0 24px;
+    }
+    .modal-card label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-ink-black);
+      margin: 14px 0 6px;
+    }
+    .modal-card input {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--color-cloud);
+      border-radius: 9px;
+      padding: 12px 14px;
+      font: 14px var(--font-inter);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .modal-card input:focus {
+      border-color: var(--color-signal-blue);
+      box-shadow: 0 0 0 3px rgba(0, 145, 255, 0.15);
+    }
+    .modal-error {
+      min-height: 18px;
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 24px;
+    }
+    .modal-actions button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 9999px;
+      padding: 12px 24px;
+      background: var(--color-ink-black);
+      color: #ffffff;
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .modal-actions button:hover {
+      background: var(--color-onyx);
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media(max-width: 600px) {
+      .kiosk { padding: 20px; }
+      .confirm { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="kiosk">
+    <header class="kiosk-top">
+      <button class="lock" id="lock-button" type="button" aria-label="Desbloquear administración" title="Desbloquear administración">
+        <svg class="lock-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/></svg>
+      </button>
+      <div class="brand">
+        <span class="brand-mark"><i></i><i></i><i></i><i></i></span>
+        <span>MARCAJIX</span>
+      </div>
+      <div class="partner">TRIPOLIVEN</div>
+    </header>
+
+    <main class="kiosk-main">
+      <section class="idle" id="idle">
+        <div class="clock" id="clock"></div>
+        <h1>Acerque su tarjeta al lector</h1>
+        <p>para registrar su marcaje</p>
+      </section>
+
+      <section class="confirm" id="confirmation">
+        <img class="confirm-photo" id="employee-photo" alt="">
+        <h2 id="employee-name"></h2>
+        <p id="employee-department"></p>
+        <p id="employee-position"></p>
+        <span class="mark-badge" id="mark-badge"></span>
+        <p id="event-time"></p>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal" id="unlock-modal" role="dialog" aria-modal="true" aria-labelledby="unlock-title">
+    <form class="modal-card" id="unlock-form">
+      <h2 id="unlock-title">Acceso administrativo</h2>
+      <p>Ingresa tus credenciales para volver al panel.</p>
+      
+      <label for="username">Usuario</label>
+      <input id="username" name="username" autocomplete="username" required>
+      
+      <label for="password">Contraseña</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      
+      <div class="modal-error" id="modal-error"></div>
+      
+      <div class="modal-actions">
+        <button type="submit">Desbloquear</button>
+      </div>
+      {% csrf_token %}
+    </form>
+  </div>
+
+  <script>
+    const idle = document.getElementById('idle');
+    const confirmation = document.getElementById('confirmation');
+    const modal = document.getElementById('unlock-modal');
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    let resetTimer;
+
+    function tick() {
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    function showEvent(data) {
+      const employee = data.data || data;
+      document.getElementById('employee-name').textContent = employee.employee || 'Marcaje registrado';
+      document.getElementById('employee-department').textContent = employee.department || '';
+      document.getElementById('employee-position').textContent = employee.position || '';
+      document.getElementById('mark-badge').textContent = (employee.mark_type || '').toUpperCase() === 'ENTRY' ? 'ENTRADA' : 'SALIDA';
+      document.getElementById('event-time').textContent = new Date(employee.marked_at).toLocaleTimeString('es-ES');
+      const photo = document.getElementById('employee-photo');
+      photo.src = employee.photo || '';
+      photo.style.display = employee.photo ? 'block' : 'none';
+      idle.style.display = 'none';
+      confirmation.classList.add('is-visible');
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        confirmation.classList.remove('is-visible');
+        idle.style.display = 'block';
+      }, 5000);
+    }
+
+    function connect() {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const socket = new WebSocket(`${scheme}://${location.host}/ws/garita-live/`);
+      socket.onmessage = event => {
+        const data = JSON.parse(event.data);
+        if (data.event === 'attendance_processed') showEvent(data);
+      };
+      socket.onclose = () => setTimeout(connect, 3000);
+    }
+    connect();
+
+    document.getElementById('lock-button').onclick = () => {
+      modal.classList.add('is-open');
+      document.getElementById('username').focus();
+    };
+
+    document.getElementById('unlock-form').onsubmit = async event => {
+      event.preventDefault();
+      const response = await fetch('{% url "kiosk_unlock" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrf },
+        body: new FormData(event.target)
+      });
+      const data = await response.json();
+      if (response.ok) {
+        location.href = data.redirect;
+      } else {
+        document.getElementById('modal-error').textContent = data.error || 'No fue posible autenticarte.';
+      }
+    };
+  </script>
+</body>
+</html>

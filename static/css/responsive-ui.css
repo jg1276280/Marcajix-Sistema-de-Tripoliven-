@@ -1,0 +1,178 @@
+/* ClickUp Style Modals & Responsive UI (DESIGN.md) */
+.dashboard-page .dashboard-content {
+  width: min(calc(100% - 80px), 1200px);
+  max-width: none;
+  margin: 0 auto;
+  padding: 40px 0 64px;
+}
+.dashboard-page .topbar {
+  padding-left: max(48px, calc((100vw - 1200px) / 2));
+  padding-right: max(48px, calc((100vw - 1200px) / 2));
+}
+.dashboard-page .stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.dashboard-page .data-table {
+  font-family: var(--font-inter, 'Inter', sans-serif);
+  font-size: 13px;
+}
+.dashboard-page .data-table th {
+  font-family: var(--font-sometype-mono, 'Sometype Mono', monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dashboard-page .data-table td {
+  padding: 15px 18px;
+}
+
+/* Modals in ClickUp Aesthetic */
+.modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(9, 12, 29, 0.45);
+  backdrop-filter: blur(8px);
+}
+.modal-layer.is-open {
+  display: flex;
+  animation: modal-fade 0.2s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.modal-card {
+  width: min(100%, 680px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  background: #ffffff;
+  border: 1px solid var(--color-bone, #e8e8e8);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(9, 12, 29, 0.18);
+  animation: modal-rise 0.25s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 32px 0;
+}
+.modal-header h2 {
+  font-family: var(--font-plus-jakarta-sans, 'Plus Jakarta Sans', sans-serif);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--color-onyx, #090c1d);
+  margin: 6px 0 4px;
+}
+.modal-header p {
+  color: var(--color-slate, #646464);
+  font-family: var(--font-inter, 'Inter', sans-serif);
+  font-size: 13px;
+  margin: 0;
+}
+.modal-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--color-ash, #838383);
+  background: var(--color-mist, #f8f9fa);
+  border: 1px solid var(--color-bone, #e8e8e8);
+  border-radius: 9999px;
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+.modal-close:hover {
+  background: var(--color-ink-black, #202020);
+  color: #ffffff;
+  border-color: var(--color-ink-black, #202020);
+}
+
+.modal-form {
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 24px 32px 32px;
+  margin: 0;
+}
+.modal-form .form-grid {
+  gap: 16px 18px;
+}
+.modal-form .field input {
+  font-size: 14px;
+  padding: 12px 14px;
+  border-radius: 9px;
+}
+.modal-form .form-actions {
+  margin-top: 24px;
+}
+.modal-form .button {
+  border-radius: 9999px !important;
+  font-size: 13px;
+}
+
+@keyframes modal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media(max-width: 900px) {
+  .dashboard-page .dashboard-content {
+    width: min(100% - 32px, 760px);
+    padding-top: 32px;
+  }
+  .dashboard-page .topbar {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .dashboard-page .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media(max-width: 600px) {
+  .dashboard-page .dashboard-content {
+    width: calc(100% - 32px);
+    padding: 24px 0 44px;
+  }
+  .dashboard-page .topbar {
+    padding: 20px 16px;
+  }
+  .dashboard-page .topbar h1 {
+    font-size: 24px;
+  }
+  .modal-layer {
+    padding: 12px;
+  }
+  .modal-card {
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+  }
+  .modal-header {
+    padding: 20px 20px 0;
+  }
+  .modal-header h2 {
+    font-size: 20px;
+  }
+  .modal-form {
+    padding: 20px;
+  }
+  .modal-form .form-grid {
+    grid-template-columns: 1fr;
+  }
+}

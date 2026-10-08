@@ -1,0 +1,211 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Personal / Marcajix{% endblock %}
+{% block page_route %}1.02 / PERSONAL{% endblock %}
+{% block page_heading %}Personal{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Directorio y estado del equipo de colaboradores de la empresa</p>{% endblock %}
+
+{% block topbar_actions %}
+    {% if user.is_staff %}
+        <a class="topbar-shortcut button button-accent" href="{% url 'employees:create' %}">
+            <svg class="button-icon" aria-hidden="true"><use href="#icon-plus"/></svg> Nuevo empleado
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content employees-page">
+
+    <!-- Barra de Herramientas y Filtros -->
+    <div class="toolbar">
+        <form class="search-form" method="get" action="{% url 'employees:list' %}">
+            <span class="search-icon" aria-hidden="true"></span>
+            <input type="search" name="q" value="{{ query }}" placeholder="Buscar por nombre, C.I. o Código de Tarjeta..." aria-label="Buscar personal">
+            <button class="button button-outline" type="submit"><svg class="button-icon" aria-hidden="true"><use href="#icon-eye"/></svg> Buscar</button>
+            {% if query %}
+                <a href="{% url 'employees:list' %}" class="button button-clear icon-button" title="Limpiar búsqueda" aria-label="Limpiar búsqueda"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></a>
+            {% endif %}
+        </form>
+
+        <div class="view-switch" role="group" aria-label="Vista del directorio">
+            <a class="view-switch-button {% if view_mode == 'grid' %}active{% endif %}" href="?view=grid{% if query %}&q={{ query }}{% endif %}" aria-label="Vista de tarjetas" title="Vista de tarjetas"><svg aria-hidden="true"><use href="#icon-grid"/></svg></a>
+            <a class="view-switch-button {% if view_mode == 'list' %}active{% endif %}" href="?view=list{% if query %}&q={{ query }}{% endif %}" aria-label="Vista de lista" title="Vista de lista"><svg aria-hidden="true"><use href="#icon-list"/></svg></a>
+        </div>
+
+        <span class="result-count">
+            {% if page_obj %}
+                {{ page_obj.paginator.count }} resultado{{ page_obj.paginator.count|pluralize:"s" }}
+            {% else %}
+                {{ employees|length }} resultado{{ employees|length|pluralize:"s" }}
+            {% endif %}
+        </span>
+    </div>
+
+    <!-- Grilla de Tarjetas de Empleados -->
+    <div class="employee-grid {% if view_mode == 'list' %}is-hidden{% endif %}">
+        {% for employee in employees %}
+            <article class="employee-card {% if employee.status == 'inactive' or employee.status == 'retired' %}employee-card--archived{% endif %}">
+                <a class="employee-photo-link" href="{% url 'employees:detail' employee.pk %}" aria-label="Ver expediente de {{ employee.full_name }}">
+                    {% if employee.photo %}
+                        <img src="{{ employee.photo.url }}" alt="Fotografía de {{ employee.full_name }}" loading="lazy">
+                    {% else %}
+                        <div class="employee-photo-empty" aria-hidden="true">
+                            {{ employee.full_name|first|upper }}
+                        </div>
+                    {% endif %}
+                    <span class="employee-status status-{{ employee.status }}">
+                        <i class="status-dot"></i>
+                        {{ employee.get_status_display }}
+                    </span>
+                </a>
+
+                <div class="employee-card-body">
+                    <div class="employee-card-title">
+                        <div>
+                            <h3>{{ employee.full_name }}</h3>
+                            <p>{{ employee.position|default:"Sin cargo asignado" }}</p>
+                        </div>
+                    </div>
+
+                    <dl class="employee-details">
+                        <div>
+                            <dt>Departamento</dt>
+                            <dd>{{ employee.department|default:"—" }}</dd>
+                        </div>
+                    </dl>
+
+                    <div class="employee-card-actions">
+                        <a class="button-link" href="{% url 'employees:detail' employee.pk %}">Ver expediente</a>
+                        {% if user.is_staff %}
+                            <a class="button-link edit-link" href="{% url 'employees:edit' employee.pk %}">Editar</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </article>
+        {% empty %}
+            <div class="empty-state employee-empty">
+                <p>No se encontraron empleados que coincidan con el criterio de búsqueda.</p>
+            </div>
+        {% endfor %}
+    </div>
+
+    <section class="employee-list-panel {% if view_mode != 'list' %}is-hidden{% endif %}">
+        <div class="table-scroll">
+            <table class="data-table employee-list-table">
+                <thead><tr><th>Foto</th><th>Empleado</th><th>Código de tarjeta</th><th>Estado</th><th>Departamento</th><th>Acciones</th></tr></thead>
+                <tbody>
+                    {% for employee in employees %}
+                        <tr class="{% if employee.status == 'inactive' or employee.status == 'retired' %}employee-row--archived{% endif %}">
+                            <td class="employee-list-photo">
+                                {% if employee.photo %}<img src="{{ employee.photo.url }}" alt="Fotografía de {{ employee.full_name }}" loading="lazy">{% else %}<span>{{ employee.full_name|first|upper }}</span>{% endif %}
+                            </td>
+                            <td><strong>{{ employee.full_name }}</strong><small>{{ employee.position|default:"Sin cargo asignado" }}</small></td>
+                            <td>{{ employee.hid_card_code|default:"Sin tarjeta" }}</td>
+                            <td><span class="employee-list-status status-{{ employee.status }}"><i class="status-dot"></i>{{ employee.get_status_display }}</span></td>
+                            <td>{{ employee.department|default:"—" }}</td>
+                            <td class="employee-list-actions">
+                                <a class="icon-action" href="{% url 'employees:detail' employee.pk %}" aria-label="Ver expediente de {{ employee.full_name }}" title="Ver expediente"><svg aria-hidden="true"><use href="#icon-eye"/></svg></a>
+                                {% if user.is_staff %}<a class="icon-action" href="{% url 'employees:edit' employee.pk %}" aria-label="Editar {{ employee.full_name }}" title="Editar"><svg aria-hidden="true"><use href="#icon-edit"/></svg></a>{% endif %}
+                                {% if user.is_staff %}<form method="post" action="{% url 'employees:delete' employee.pk %}">{% csrf_token %}<button class="icon-action danger" type="submit" aria-label="Eliminar {{ employee.full_name }}" title="Eliminar" onclick="return confirm('¿Eliminar este empleado?')"><svg aria-hidden="true"><use href="#icon-trash"/></svg></button></form>{% endif %}
+                            </td>
+                        </tr>
+                    {% empty %}<tr><td colspan="6" class="empty-state">No se encontraron empleados.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Paginación -->
+    {% if page_obj.has_other_pages %}
+        <nav class="pagination-container" aria-label="Navegación del directorio">
+            <div class="pagination-info">
+                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </div>
+            <div class="pagination-actions">
+                {% if page_obj.has_previous %}
+                    <a class="button button-outline button-sm" href="?page={{ page_obj.previous_page_number }}&view={{ view_mode }}{% if query %}&q={{ query }}{% endif %}">
+                        <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-left"/></svg> Anterior
+                    </a>
+                {% endif %}
+                {% if page_obj.has_next %}
+                    <a class="button button-outline button-sm" href="?page={{ page_obj.next_page_number }}&view={{ view_mode }}{% if query %}&q={{ query }}{% endif %}">
+                        Siguiente <svg class="button-icon" aria-hidden="true"><use href="#icon-arrow-right"/></svg>
+                    </a>
+                {% endif %}
+            </div>
+        </nav>
+    {% endif %}
+
+</div>
+
+<!-- Modal: Crear / Editar Empleado -->
+{% if employee_form and user.is_staff %}
+    <div class="modal-layer {% if open_modal == 'create' or open_modal == 'edit' %}is-open{% endif %}" 
+         id="employee-modal" 
+         role="dialog" 
+         aria-modal="true" 
+         aria-labelledby="employee-modal-title">
+        
+        <div class="modal-card employee-modal">
+            <header class="modal-header">
+                <div>
+                    <span class="section-number">{% if editing_employee %}1.02.2{% else %}1.02.1{% endif %} / PERSONAL</span>
+                    <h2 id="employee-modal-title">
+                        {% if editing_employee %}Editar empleado{% else %}Nuevo empleado{% endif %}
+                    </h2>
+                    <p>Los campos requeridos deben ser completados.</p>
+                </div>
+                <a class="modal-close" href="{% url 'employees:list' %}" aria-label="Cerrar ventana modal"><svg class="button-icon" aria-hidden="true"><use href="#icon-close"/></svg></a>
+            </header>
+
+            <form class="admin-form modal-form" 
+                  method="post" 
+                  enctype="multipart/form-data" 
+                  action="{% if editing_employee %}{% url 'employees:edit' editing_employee.pk %}{% else %}{% url 'employees:create' %}{% endif %}" 
+                  novalidate>
+                
+                {% csrf_token %}
+                {% include "dashboard/employees/form_fields.html" with form=employee_form %}
+
+                <footer class="form-actions">
+                    <a class="button button-secondary" href="{% url 'employees:list' %}">Cancelar</a>
+                    <button class="button button-accent button-submit" type="submit">
+                        {% if editing_employee %}Guardar cambios{% else %}Crear empleado{% endif %}
+                    </button>
+                </footer>
+            </form>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const photoInputs = document.querySelectorAll('.photo-input');
+    
+    photoInputs.forEach(function(input) {
+        input.addEventListener('change', function() {
+            const file = this.files[0];
+            if (!file) return;
+
+            const fieldGroup = this.closest('.photo-field');
+            if (!fieldGroup) return;
+
+            const preview = fieldGroup.querySelector('.photo-preview');
+            if (preview) {
+                if (preview.dataset.objectUrl) {
+                    URL.revokeObjectURL(preview.dataset.objectUrl);
+                }
+                
+                const objectUrl = URL.createObjectURL(file);
+                preview.src = objectUrl;
+                preview.alt = `Vista previa de ${file.name}`;
+                preview.dataset.objectUrl = objectUrl;
+                preview.classList.remove('empty');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

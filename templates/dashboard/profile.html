@@ -1,0 +1,103 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Mi perfil / Marcajix{% endblock %}
+{% block page_route %}3.01 / CUENTA{% endblock %}
+{% block page_heading %}Mi perfil{% endblock %}
+{% block page_subtitle %}<p class="page-subtitle">Datos personales y seguridad</p>{% endblock %}
+
+{% block dashboard_content %}
+<div class="dashboard-content profile-page">
+    
+    <!-- Retroalimentación de Mensajes (Éxito / Alerta) -->
+    {% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Tarjeta 1: Información Personal -->
+    <div class="profile-columns">
+    <section class="profile-card">
+        <form class="admin-form profile-form" method="post" action="{% url 'profile' %}" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+                <div class="form-error">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <div class="profile-summary">
+                <div class="profile-avatar">
+                    {{ user.username|first|upper }}
+                </div>
+                <div class="profile-info">
+                    <strong>{{ user.username }}</strong>
+                    <span>{{ user.email|default:"Sin correo registrado" }}</span>
+                </div>
+            </div>
+
+            <div class="form-grid">
+                {% for field in form %}
+                    <div class="field {% if field.errors %}has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}
+                            <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="form-actions">
+                <button class="button button-accent button-submit" type="submit">
+                    Guardar perfil
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Tarjeta 2: Cambio de Contraseña -->
+    <section class="profile-card">
+        <form class="admin-form profile-form" method="post" action="{% url 'profile_password' %}" novalidate>
+            {% csrf_token %}
+
+            <div class="profile-section-heading">
+                <span class="section-number">3.01.1 / SEGURIDAD</span>
+                <h3>Cambiar contraseña</h3>
+                <p class="page-description">Usa una contraseña única de al menos 8 caracteres.</p>
+            </div>
+
+            {% if password_error and password_form.non_field_errors %}
+                <div class="form-error">
+                    {{ password_form.non_field_errors }}
+                </div>
+            {% endif %}
+
+            <div class="form-grid">
+                {% for field in password_form %}
+                    <div class="field {% if field.errors %}has-error{% endif %}">
+                        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% for error in field.errors %}
+                            <small class="field-error">{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            <div class="form-actions">
+                <button class="button button-accent button-submit" type="submit">
+                    Actualizar contraseña
+                </button>
+            </div>
+        </form>
+    </section>
+    </div>
+
+</div>
+{% endblock %}
