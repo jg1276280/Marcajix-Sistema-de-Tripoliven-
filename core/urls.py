@@ -1,7 +1,7 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
-from . import views
+from . import live, views
 from .forms import LoginForm
 
 urlpatterns = [
@@ -12,8 +12,8 @@ urlpatterns = [
     path("dashboard/dispositivos/", views.device_config_view, name="device_config"),
     path("dashboard/dispositivos/probar/", views.device_config_test, name="device_config_test"),
     path("dashboard/dispositivos/leer/", views.device_read_test, name="device_read_test"),
-    path("kiosk/garita/", views.kiosk_garita, name="kiosk_garita"),
-    path("kiosk/garita/desbloquear/", views.kiosk_unlock, name="kiosk_unlock"),
+    path("kiosco/", live.kiosk_display, name="kiosk_display"),
+    path("kiosco/eventos/", live.live_feed, name="live_feed"),
     path("dashboard/perfil/", views.profile, name="profile"),
     path("dashboard/perfil/contrasena/", views.profile_password, name="profile_password"),
     path("dashboard/usuarios/", views.user_list, name="user_list"),

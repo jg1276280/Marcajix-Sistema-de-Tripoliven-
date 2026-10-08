@@ -1,0 +1,3 @@
+# Los scripts de Windows se guardan tal cual (CRLF; los .ps1 con BOM para Windows PowerShell 5.1).
+*.bat -text
+*.ps1 -text

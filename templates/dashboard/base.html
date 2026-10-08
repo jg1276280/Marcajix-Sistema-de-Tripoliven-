@@ -154,8 +154,8 @@
             <!-- Acciones y Menú de Perfil Dropdown -->
             <div class="topbar-actions">
                 {% if access.monitor_door %}
-                <a class="topbar-shortcut button button-outline kiosk-shortcut" href="{% url 'kiosk_garita' %}" aria-label="Abrir modo kiosko">
-                    <svg class="button-icon" aria-hidden="true"><use href="#icon-kiosk"/></svg><span>Modo kiosko</span>
+                <a class="topbar-shortcut button button-outline kiosk-shortcut" href="{% url 'kiosk_display' %}" aria-label="Abrir pantalla de garita">
+                    <svg class="button-icon" aria-hidden="true"><use href="#icon-kiosk"/></svg><span>Pantalla de garita</span>
                 </a>
                 {% endif %}
                 {% block topbar_actions %}{% endblock %}

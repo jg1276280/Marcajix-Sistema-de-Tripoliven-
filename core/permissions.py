@@ -6,6 +6,7 @@ la tienen. Los superusuarios tienen todas las capacidades.
 """
 from functools import wraps
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 
@@ -76,3 +77,8 @@ def capability_required(*capabilities):
         return wrapped
 
     return decorator
+
+
+def is_display_client(request):
+    """Pantallas de garita autorizadas por IP (KIOSK_DISPLAY_IPS): ven el kiosco y las fotos sin sesión."""
+    return request.META.get("REMOTE_ADDR", "") in settings.KIOSK_DISPLAY_IPS

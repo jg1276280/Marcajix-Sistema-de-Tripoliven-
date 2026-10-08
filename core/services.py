@@ -1,7 +1,5 @@
 from datetime import timedelta
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.utils import timezone
 from django.db import transaction
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -106,33 +104,3 @@ def register_attendance(employee_id, marked_at, mark_type, source="Registro manu
             return AttendanceLog.objects.create(employee=employee, marked_at=marked_at, mark_type=mark_type, source=source[:120], capture_mode=capture_mode, registered_by=registered_by)
     # Fuera de la transacción del marcaje: el intento bloqueado debe quedar guardado aunque se lance el error.
     _record_blocked_attempt(employee, mark_type, source, registered_by)
-
-
-def broadcast_attendance_event(log):
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    payload = {
-        "type": "attendance.processed",
-        "event": "attendance_processed",
-        "data": {
-            "id": log.pk,
-            "employee_id": log.employee_id,
-            "employee": log.employee.full_name,
-            "department": log.employee.department.name,
-            "position": log.employee.position.name,
-            "photo": log.employee.photo.url if log.employee.photo else "",
-            "mark_type": log.mark_type,
-            "marked_at": log.marked_at.isoformat(),
-            "status": log.employee.status,
-        },
-    }
-    async_to_sync(channel_layer.group_send)("garita-live", {"type": "broadcast.event", "payload": payload})
-
-
-def broadcast_kiosk_event(event, data=None, message=""):
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    payload = {"type": event, "event": event, "message": message, "data": data or {}}
-    async_to_sync(channel_layer.group_send)("garita-live", {"type": "broadcast.event", "payload": payload})

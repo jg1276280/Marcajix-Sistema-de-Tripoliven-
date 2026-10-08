@@ -367,3 +367,36 @@ class AttendanceServiceTests(TestCase):
         self.client.force_login(create_user_with_role("history-viewer", SECURITY))
         response = self.client.get(reverse("attendance_history"), {"q": "CARD-999"})
         self.assertContains(response, "Tarjeta no reconocida")
+
+    def test_hid_listener_registers_cards_and_reports_status(self):
+        import sys
+        import types
+        from unittest import mock
+
+        from .hid_listener import listen_hid_reader
+        from .models import HIDReaderConfig
+
+        class StopListening(Exception):
+            pass
+
+        class FakeSerial:
+            lines = [b"CARD-777\r\n", b"", b"CARD-777\r\n"]  # La segunda lectura es un rebote y se ignora.
+
+            def __init__(self, **kwargs):
+                pass
+
+            def readline(self):
+                if not self.lines:
+                    raise StopListening
+                return self.lines.pop(0)
+
+            def close(self):
+                pass
+
+        fake_serial = types.SimpleNamespace(Serial=FakeSerial, SerialException=OSError)
+        config = HIDReaderConfig.objects.create(pk=1, port="COM9")
+        with mock.patch.dict(sys.modules, {"serial": fake_serial}), self.assertRaises(StopListening):
+            listen_hid_reader(config)
+        self.assertEqual(AttendanceLog.objects.filter(employee=self.employee, capture_mode=AttendanceLog.HID).count(), 1)
+        config.refresh_from_db()
+        self.assertTrue(config.is_online)

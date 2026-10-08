@@ -1,24 +1,21 @@
 import shutil
 import tempfile
 
-from asgiref.sync import async_to_sync
-from channels.testing import WebsocketCommunicator
 from django.contrib.admin.models import CHANGE, LogEntry
-from django.contrib.auth.models import AnonymousUser, Group, User
+from django.contrib.auth.models import Group, User
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from employees.models import Department, Employee, Management, Position
 
-from .live import GaritaLiveConsumer
 from .permissions import HUMAN_RESOURCES, SECURITY, SYSTEMS
 from .test_utils import create_test_image, create_user_with_role
 
 STORAGES = {"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"}, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}
 
 
-@override_settings(MEDIA_ROOT="test-media", STORAGES=STORAGES)
+@override_settings(MEDIA_ROOT="test-media", STORAGES=STORAGES, KIOSK_DISPLAY_IPS=set())
 class RoleAccessMatrixTests(TestCase):
     """Cada rol solo llega a sus módulos; el resto responde 403."""
 
@@ -41,7 +38,7 @@ class RoleAccessMatrixTests(TestCase):
             reverse("device_config"): {SYSTEMS: 200, SECURITY: 403, HUMAN_RESOURCES: 403},
             reverse("employees:structure"): {SYSTEMS: 200, SECURITY: 403, HUMAN_RESOURCES: 403},
             reverse("attendance_monitor"): {SYSTEMS: 200, SECURITY: 200, HUMAN_RESOURCES: 403},
-            reverse("kiosk_garita"): {SYSTEMS: 200, SECURITY: 200, HUMAN_RESOURCES: 403},
+            reverse("kiosk_display"): {SYSTEMS: 200, SECURITY: 200, HUMAN_RESOURCES: 403},
             reverse("employees:list"): {SYSTEMS: 200, SECURITY: 200, HUMAN_RESOURCES: 200},
             reverse("attendance_history"): {SYSTEMS: 200, SECURITY: 200, HUMAN_RESOURCES: 200},
             detail: {SYSTEMS: 200, SECURITY: 403, HUMAN_RESOURCES: 200},
@@ -58,7 +55,7 @@ class RoleAccessMatrixTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_anonymous_users_are_sent_to_login(self):
-        for url in (reverse("dashboard"), reverse("employees:list"), reverse("attendance_monitor"), reverse("kiosk_garita"), reverse("attendance_employee_search")):
+        for url in (reverse("dashboard"), reverse("employees:list"), reverse("attendance_monitor"), reverse("kiosk_display"), reverse("attendance_employee_search")):
             with self.subTest(url=url):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
@@ -126,6 +123,7 @@ class UserManagementTests(TestCase):
         self.assertEqual(set(Group.objects.values_list("name", flat=True)), {SYSTEMS, SECURITY, HUMAN_RESOURCES})
 
 
+@override_settings(KIOSK_DISPLAY_IPS=set())
 class ProtectedMediaTests(TestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp()
@@ -147,19 +145,57 @@ class ProtectedMediaTests(TestCase):
             self.assertIn(self.client.get("/media/../manage.py").status_code, (400, 404))
 
 
-class GaritaWebsocketTests(TestCase):
-    def _connect(self, user):
-        async def connect():
-            communicator = WebsocketCommunicator(GaritaLiveConsumer.as_asgi(), "/ws/garita-live/")
-            communicator.scope["user"] = user
-            connected, _ = await communicator.connect()
-            await communicator.disconnect()
-            return connected
+@override_settings(MEDIA_ROOT="test-media", STORAGES=STORAGES, KIOSK_DISPLAY_IPS={"10.0.0.50"})
+class GaritaDisplayTests(TestCase):
+    """La pantalla exterior funciona sin sesión, autorizada por IP; nadie más la ve sin rol."""
 
-        return async_to_sync(connect)()
+    DISPLAY = {"REMOTE_ADDR": "10.0.0.50"}
+    OTHER_PC = {"REMOTE_ADDR": "10.0.0.99"}
 
-    def test_anonymous_clients_are_rejected(self):
-        self.assertFalse(self._connect(AnonymousUser()))
+    @classmethod
+    def setUpTestData(cls):
+        department = Department.objects.create(name="Seguridad", management=Management.objects.create(name="Operaciones"))
+        cls.employee = Employee.objects.create(full_name="Pedro Ruiz", identification="31395901", hid_card_code="CARD-777", position=Position.objects.create(name="Vigilante", department=department), photo=create_test_image("kiosk.png"))
 
-    def test_authorized_clients_are_accepted(self):
-        self.assertTrue(self._connect(User(username="root", is_superuser=True, is_active=True)))
+    def test_display_pc_sees_kiosk_without_login(self):
+        self.assertEqual(self.client.get(reverse("kiosk_display"), **self.DISPLAY).status_code, 200)
+
+    def test_other_pcs_need_a_role_with_door_access(self):
+        self.assertEqual(self.client.get(reverse("kiosk_display"), **self.OTHER_PC).status_code, 302)
+        self.assertEqual(self.client.get(reverse("live_feed"), **self.OTHER_PC).status_code, 403)
+        self.client.force_login(create_user_with_role("rrhh", HUMAN_RESOURCES))
+        self.assertEqual(self.client.get(reverse("live_feed"), **self.OTHER_PC).status_code, 403)
+        self.client.force_login(create_user_with_role("guardia", SECURITY))
+        self.assertEqual(self.client.get(reverse("live_feed"), **self.OTHER_PC).status_code, 200)
+
+    def test_feed_returns_only_new_reads_after_the_cursor(self):
+        from .hid_listener import process_card
+
+        start = self.client.get(reverse("live_feed"), **self.DISPLAY).json()
+        self.assertEqual(start["events"], [])
+        process_card("CARD-777", "HID · Garita")
+        process_card("CARD-000", "HID · Garita")
+        cursor = start["cursor"]
+        data = self.client.get(reverse("live_feed"), {"log": cursor["log"], "event": cursor["event"]}, **self.DISPLAY).json()
+        self.assertEqual([event["kind"] for event in data["events"]], ["entry", "unknown_card"])
+        self.assertEqual(data["events"][0]["name"], "Pedro Ruiz")
+        self.assertEqual(data["events"][0]["department"], "Seguridad")
+        again = self.client.get(reverse("live_feed"), data["cursor"], **self.DISPLAY).json()
+        self.assertEqual(again["events"], [])
+
+    def test_display_pc_can_load_employee_photos(self):
+        photo_url = reverse("protected_media", args=[self.employee.photo.name])
+        self.assertEqual(self.client.get(photo_url, **self.DISPLAY).status_code, 200)
+        self.assertEqual(self.client.get(photo_url, **self.OTHER_PC).status_code, 302)
+
+    def test_reader_status_reflects_heartbeat(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import HIDReaderConfig
+
+        HIDReaderConfig.objects.create(pk=1, status=HIDReaderConfig.STATUS_CONNECTED, last_seen_at=timezone.now())
+        self.assertTrue(self.client.get(reverse("live_feed"), **self.DISPLAY).json()["reader"]["online"])
+        HIDReaderConfig.objects.filter(pk=1).update(last_seen_at=timezone.now() - timedelta(minutes=5))
+        self.assertFalse(self.client.get(reverse("live_feed"), **self.DISPLAY).json()["reader"]["online"])

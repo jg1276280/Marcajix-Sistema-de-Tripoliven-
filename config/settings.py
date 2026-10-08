@@ -22,19 +22,15 @@ if not DEBUG and (SECRET_KEY == "dev-only-change-me" or len(SECRET_KEY) < 50):
 if not DEBUG and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS debe contener al menos un host en producción.")
 
-INSTALLED_APPS = ["django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles", "channels", "core.apps.CoreConfig", "employees.apps.EmployeesConfig"]
+INSTALLED_APPS = ["django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles", "core.apps.CoreConfig", "employees.apps.EmployeesConfig"]
 MIDDLEWARE = ["django.middleware.security.SecurityMiddleware", "whitenoise.middleware.WhiteNoiseMiddleware", "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware", "django.middleware.csrf.CsrfViewMiddleware", "django.contrib.auth.middleware.AuthenticationMiddleware", "core.middleware.SessionExpiryMiddleware", "django.contrib.messages.middleware.MessageMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware", "core.middleware.SlowQueryLoggingMiddleware"]
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [BASE_DIR / "templates"], "APP_DIRS": True, "OPTIONS": {"context_processors": ["django.template.context_processors.request", "django.contrib.auth.context_processors.auth", "django.contrib.messages.context_processors.messages", "core.context_processors.access"]}}]
 WSGI_APPLICATION = "config.wsgi.application"
-ASGI_APPLICATION = "config.routing.application"
-# El lector HID (manage.py listen_hid) corre en un proceso aparte del servidor web. Para que sus
-# eventos lleguen en vivo al kiosco y al monitor hace falta una capa compartida (Redis/Memurai).
-CHANNEL_REDIS_URL = os.getenv("CHANNEL_REDIS_URL", "").strip()
-if CHANNEL_REDIS_URL:
-    CHANNEL_LAYERS = {"default": {"BACKEND": "channels_redis.core.RedisChannelLayer", "CONFIG": {"hosts": [CHANNEL_REDIS_URL]}}}
-else:
-    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+# Pantallas de garita: equipos que pueden ver el kiosco sin iniciar sesión. Por defecto solo el propio
+# servidor (la PC de la garita con la pantalla exterior). Se pueden añadir IPs de otras pantallas.
+KIOSK_DISPLAY_IPS = {ip.strip() for ip in os.getenv("KIOSK_DISPLAY_IPS", "127.0.0.1,::1").split(",") if ip.strip()}
 
 db_engine = os.getenv("DB_ENGINE", "").lower()
 if db_engine not in {"mssql", "sql_server", "sqlserver"}:

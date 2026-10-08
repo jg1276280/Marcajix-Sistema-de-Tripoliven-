@@ -22,7 +22,7 @@ from .forms import HIDReaderConfigForm, LoginForm, ProfileForm, ProfilePasswordF
 from .permissions import CONFIGURE_DEVICES, MANAGE_USERS, MONITOR_DOOR, REGISTER_ATTENDANCE, VIEW_ATTENDANCE_HISTORY, VIEW_AUDIT, capability_required, has_capability
 from .security import reset_failed_logins
 from .models import AttendanceLog, HIDReaderConfig, SecurityEvent
-from .services import AttendanceRegistrationError, broadcast_attendance_event, register_attendance
+from .services import AttendanceRegistrationError, register_attendance
 
 logger = logging.getLogger(__name__)
 
@@ -239,24 +239,6 @@ def device_read_test(request):
     return JsonResponse(result)
 
 
-def kiosk_unlock(request):
-    if request.method != "POST":
-        return JsonResponse({"error": "Método no permitido."}, status=405)
-    form = LoginForm(request, data=request.POST)
-    if not form.is_valid():
-        return JsonResponse({"error": "Las credenciales no son válidas."}, status=403)
-    user = form.get_user()
-    if not has_capability(user, MONITOR_DOOR):
-        return JsonResponse({"error": "Tu rol no tiene acceso a la garita."}, status=403)
-    login(request, user)
-    return JsonResponse({"redirect": reverse("dashboard")})
-
-
-@capability_required(MONITOR_DOOR)
-def kiosk_garita(request):
-    return render(request, "dashboard/kiosk/live.html")
-
-
 @login_required
 def profile(request):
     form = ProfileForm(request.POST or None, instance=request.user)
@@ -408,7 +390,6 @@ def attendance_register(request):
                 successes.append(payload)
                 if log.employee.status == Employee.VACATION:
                     warnings.append({"employee_id": log.employee_id, "message": f"{log.employee.full_name}: el marcaje fue procesado, pero el empleado está de vacaciones. Verifica su presencia física o actualiza su estatus."})
-                broadcast_attendance_event(log)
             except (AttendanceRegistrationError, TypeError, ValueError) as error:
                 errors.append({"employee_id": row.get("employee_id"), "error": str(error), "code": getattr(error, "code", "invalid")})
     except Exception:  # pragma: no cover - defensive catch for unexpected runtime errors.

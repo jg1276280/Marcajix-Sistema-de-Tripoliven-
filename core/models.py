@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from django.utils import timezone
 
 
 class HIDReaderConfig(models.Model):
@@ -17,6 +18,15 @@ class HIDReaderConfig(models.Model):
     timeout = models.FloatField("Tiempo de espera (s)", default=1.0)
     wiegand_format = models.CharField("Formato Wiegand", max_length=60, default="Wiegand 26-bit")
     is_active = models.BooleanField("Lector activo", default=True)
+    # Estado que escribe el proceso del lector (manage.py listen_hid) para que el kiosco y el monitor lo muestren.
+    STATUS_CONNECTED = "connected"
+    STATUS_ERROR = "error"
+    STATUS_STOPPED = "stopped"
+    STATUSES = ((STATUS_CONNECTED, "Conectado"), (STATUS_ERROR, "Con error"), (STATUS_STOPPED, "Detenido"))
+    HEARTBEAT_TIMEOUT_SECONDS = 60
+    status = models.CharField("Estado del lector", max_length=10, choices=STATUSES, default=STATUS_STOPPED)
+    status_message = models.CharField("Detalle del estado", max_length=255, blank=True)
+    last_seen_at = models.DateTimeField("Última señal del lector", null=True, blank=True)
 
     class Meta:
         db_table = "core_hid_reader_config"
@@ -25,6 +35,11 @@ class HIDReaderConfig(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_online(self):
+        """El lector está en línea si informó conexión hace menos de HEARTBEAT_TIMEOUT_SECONDS."""
+        return self.status == self.STATUS_CONNECTED and self.last_seen_at is not None and (timezone.now() - self.last_seen_at).total_seconds() < self.HEARTBEAT_TIMEOUT_SECONDS
 
 
 class UserSecurity(models.Model):

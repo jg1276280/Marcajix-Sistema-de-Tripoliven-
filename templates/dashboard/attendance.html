@@ -7,7 +7,7 @@
 {% block page_subtitle %}<p class="page-subtitle">Selecciona empleados y confirma cada registro de entrada o salida.</p>{% endblock %}
 
 {% block topbar_actions %}
-    <span id="live-status" class="status inactive" role="status" aria-live="polite"><i class="status-dot"></i> Conectando...</span>
+    <span id="live-status" class="status inactive" role="status" aria-live="polite"><i class="status-dot"></i> Comprobando lector...</span>
 {% endblock %}
 
 {% block dashboard_content %}
@@ -133,14 +133,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const selected = new Map();
     const now = new Date();
+    // Monitor en vivo: consulta los eventos de la garita (lector HID y registros manuales) cada 2 segundos.
     const liveStatus = document.getElementById('live-status');
-    const setLiveStatus = (connected) => {
+    const setLiveStatus = (ok, label) => {
         if (!liveStatus) return;
-        liveStatus.className = connected ? 'status active' : 'status inactive';
-        liveStatus.innerHTML = connected ? '<i class="status-dot"></i> En vivo' : '<i class="status-dot"></i> Reconectando...';
+        liveStatus.className = ok ? 'status active' : 'status inactive';
+        liveStatus.innerHTML = `<i class="status-dot"></i> ${escapeHtml(label)}`;
+    };
+    const LIVE_MESSAGES = {
+        entry: (event) => [`Entrada: ${event.name}`, 'success'],
+        exit: (event) => [`Salida: ${event.name}`, 'success'],
+        denied: (event) => [`Acceso denegado: ${event.name}. ${event.message}`, 'error'],
+        unknown_card: (event) => [`Tarjeta no reconocida (${event.card_code})`, 'warning'],
     };
     const toastStack = document.getElementById('toast-stack');
-
     const showToast = (message, tone = 'info') => {
         const toast = document.createElement('div');
         toast.className = `toast toast-${tone}`;
@@ -148,40 +154,28 @@ document.addEventListener('DOMContentLoaded', () => {
         toastStack.appendChild(toast);
         const close = () => toast.remove();
         toast.querySelector('.toast-close').addEventListener('click', close);
-        setTimeout(close, 4500);
+        setTimeout(close, 6000);
     };
-
-    const connectLiveStream = () => {
-        const protocols = window.location.protocol === 'https:' ? 'wss' : 'ws';
-        const socket = new WebSocket(`${protocols}://${window.location.host}/ws/garita-live/`);
-
-        socket.addEventListener('open', () => setLiveStatus(true));
-
-        socket.addEventListener('message', (event) => {
-            try {
-                const payload = JSON.parse(event.data);
-                if (payload && payload.type === 'connection') {
-                    setLiveStatus(true);
-                    return;
-                }
-                if (payload && payload.event === 'attendance_processed') {
-                    showToast(`Marcaje procesado para ${payload.data.employee}`, 'success');
-                }
-                if (payload && ['card_unrecognized', 'attendance_duplicate', 'attendance_rejected', 'reader_error'].includes(payload.event)) {
-                    showToast(payload.message || 'El lector requiere atención.', payload.event === 'reader_error' ? 'error' : 'warning');
-                }
-            } catch (error) {
-                console.warn('WS payload no válido', error);
-            }
-        });
-
-        socket.addEventListener('close', () => {
-            setLiveStatus(false);
-            setTimeout(connectLiveStream, 2000);
-        });
+    let liveCursor = null;
+    const pollLiveFeed = async () => {
+        try {
+            const params = liveCursor ? `?log=${liveCursor.log}&event=${liveCursor.event}` : '';
+            const response = await fetch(`{% url 'live_feed' %}${params}`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(response.status);
+            const data = await response.json();
+            liveCursor = data.cursor;
+            setLiveStatus(data.reader.online, data.reader.label);
+            data.events.forEach((event) => {
+                const build = LIVE_MESSAGES[event.kind];
+                if (build) showToast(...build(event));
+            });
+        } catch (error) {
+            setLiveStatus(false, 'Sin conexión con el servidor');
+        } finally {
+            setTimeout(pollLiveFeed, 2000);
+        }
     };
-
-    connectLiveStream();
+    pollLiveFeed();
 
     const saveDraft = () => {
         sessionStorage.setItem(draftStorageKey, JSON.stringify([...selected.values()]));
