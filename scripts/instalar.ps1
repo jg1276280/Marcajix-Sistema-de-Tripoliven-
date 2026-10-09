@@ -103,10 +103,20 @@ function Read-DatabaseSettings([bool]$LocalExpress) {
     if ($LocalExpress) {
         return @{ Auth = 'windows'; Host = 'localhost\SQLEXPRESS'; Port = ''; Name = 'marcajix'; User = ''; Password = '' }
     }
-    Write-Host 'Datos del SQL Server existente de la empresa:'
+    Write-Host ''
+    Write-Host 'Datos del SQL Server existente:'
+    $local = @(Get-LocalSqlInstances)
+    $default = ''
+    if ($local.Count) {
+        Write-Host '  Instancias de SQL Server encontradas en esta PC:'
+        foreach ($instance in $local) { Write-Host "    - $($instance.Server)   ($($instance.State))" }
+        $default = $local[0].Server
+    }
+    Write-Host '  Si SQL Server está en esta PC, use el nombre de la lista y deje el puerto vacío.'
+    Write-Host '  Si está en otro servidor: SERVIDOR o SERVIDOR\INSTANCIA; el puerto solo si lo cambiaron (normal: 1433).'
     $database = @{
-        Host = Read-Value 'Servidor (ej. SRV-SQL o SRV-SQL\INSTANCIA)' ''
-        Port = Read-Value 'Puerto (vacío para instancia con nombre)' '1433'
+        Host = Read-Value 'Servidor' $default
+        Port = Read-Value 'Puerto (Enter para dejarlo vacío)' ''
         Name = Read-Value 'Nombre de la base de datos' 'marcajix'
         User = ''
         Password = ''
@@ -120,6 +130,43 @@ function Read-DatabaseSettings([bool]$LocalExpress) {
         $database.Password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
     }
     return $database
+}
+
+function Get-LocalSqlInstances {
+    # Instancias de SQL Server instaladas en esta PC (registro de Windows) y estado de su servicio.
+    $key = 'HKLM:\SOFTWARE\Microsoft\Microsoft SQL Server\Instance Names\SQL'
+    if (-not (Test-Path $key)) { return @() }
+    $names = (Get-Item $key).Property
+    foreach ($name in $names) {
+        $serviceName = 'MSSQL$' + $name
+        $server = "localhost\$name"
+        if ($name -eq 'MSSQLSERVER') { $serviceName = 'MSSQLSERVER'; $server = 'localhost' }
+        $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+        $state = 'servicio no encontrado'
+        if ($service) {
+            if ($service.Status -ne 'Running') {
+                try { Start-Service -Name $serviceName; $service.Refresh() } catch { }
+            }
+            if ($service.Status -eq 'Running') { $state = 'en ejecución' } else { $state = 'detenido' }
+        }
+        [pscustomobject]@{ Server = $server; State = $state }
+    }
+}
+
+function Initialize-Database([bool]$LocalExpress) {
+    # Crea la base de datos; si la conexión falla, explica la causa y permite corregir los datos.
+    while ($true) {
+        & $Python (Join-Path $Root 'scripts\crear_bd.py')
+        if ($LASTEXITCODE -eq 0) { return }
+        Write-Warn 'No se pudo conectar con SQL Server. Revise:'
+        Write-Host '      - Si SQL Server está en esta PC: servidor "localhost\NOMBRE" (p. ej. localhost\SQLEXPRESS) y puerto vacío.'
+        Write-Host '      - "Denegó expresamente la conexión": nadie escucha en ese servidor/puerto (puerto incorrecto o TCP/IP desactivado).'
+        Write-Host '      - "Login failed": la cuenta no tiene permiso en SQL Server; use usuario y contraseña de SQL o pida acceso.'
+        if (-not (Read-YesNo '¿Volver a introducir los datos de conexión?' $true)) {
+            throw 'No se pudo preparar la base de datos.'
+        }
+        Write-EnvFile (Read-DatabaseSettings $false)
+    }
 }
 
 function Invoke-Manage([string[]]$Arguments) {
@@ -232,8 +279,7 @@ try {
     }
 
     Write-Step 'Base de datos'
-    & $Python (Join-Path $Root 'scripts\crear_bd.py')
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudo preparar la base de datos.' }
+    Initialize-Database $localExpress
     Invoke-Manage @('migrate', '--noinput')
     Invoke-Manage @('collectstatic', '--noinput', '--verbosity', '0')
     Write-Ok 'Base de datos y archivos estáticos listos.'
