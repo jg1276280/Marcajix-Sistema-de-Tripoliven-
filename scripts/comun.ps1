@@ -23,6 +23,22 @@ function Read-YesNo([string]$Question, [bool]$Default) {
     }
 }
 
+function Invoke-NativeQuiet([scriptblock]$Command) {
+    # Ejecuta un programa externo descartando sus mensajes de error. En Windows PowerShell 5.1,
+    # redirigir stderr con $ErrorActionPreference = 'Stop' convierte cualquier aviso del programa
+    # (p. ej. "No suitable Python runtime found" de py.exe) en un error fatal del script.
+    # El resultado se consulta en $LASTEXITCODE.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        return (& $Command 2>$null | Out-String).Trim()
+    } catch {
+        return ''
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
 function Write-Utf8File([string]$Path, [string]$Content) {
     [IO.File]::WriteAllText($Path, $Content, (New-Object Text.UTF8Encoding $false))
 }

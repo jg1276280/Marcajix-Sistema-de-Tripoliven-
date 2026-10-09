@@ -24,7 +24,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 function Install-WingetPackage([string]$Id, [string]$Name, [string[]]$ExtraArgs = @()) {
-    & winget list --id $Id --exact --accept-source-agreements *> $null
+    Invoke-NativeQuiet { & winget list --id $Id --exact --accept-source-agreements } | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Ok "$Name ya está instalado."
         return
@@ -48,8 +48,9 @@ function Find-BasePython {
     }
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($launcher) {
-        $path = & $launcher.Source -3.12 -c 'import sys; print(sys.executable)' 2>$null
-        if ($LASTEXITCODE -eq 0 -and $path) { return $path.Trim() }
+        # Si Python 3.12 no está instalado, py.exe responde con un error: no es un fallo del instalador.
+        $path = Invoke-NativeQuiet { & $launcher.Source -3.12 -c 'import sys; print(sys.executable)' }
+        if ($LASTEXITCODE -eq 0 -and $path -and (Test-Path $path)) { return $path }
     }
     return $null
 }
