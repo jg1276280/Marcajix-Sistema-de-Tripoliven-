@@ -63,7 +63,7 @@
     item.className = 'list-item is-new';
     const avatar = event.photo ? `<img src="${escapeHtml(event.photo)}" alt="">` : escapeHtml((event.name || '?').slice(0, 1).toUpperCase());
     const detail = event.kind === 'unknown_card' ? `Código ${escapeHtml(event.card_code)}` : [event.department, event.kind === 'denied' ? event.message : ''].filter(Boolean).map(escapeHtml).join(' · ');
-    item.innerHTML = `<span class="avatar">${avatar}</span><div class="list-item-main"><strong>${escapeHtml(event.name || 'Tarjeta no registrada')}</strong><small>${detail}</small></div><div class="list-item-side"><span class="badge ${tone}">${label}</span><span class="num">${escapeHtml(event.time)}</span></div>`;
+    item.innerHTML = `<span class="avatar">${avatar}</span><div class="list-item-main"><strong>${escapeHtml(event.name || 'Tarjeta no registrada')}${event.celebration ? ` <span class="badge badge-warning">${event.celebration.type === 'birthday' ? 'Cumpleaños' : `${event.celebration.years} año${event.celebration.years === 1 ? '' : 's'}`}</span>` : ''}</strong><small>${detail}</small></div><div class="list-item-side"><span class="badge ${tone}">${label}</span><span class="num">${escapeHtml(event.time)}</span></div>`;
     return item;
   };
   const alertTone = () => {

@@ -1,0 +1,65 @@
+{% load ui %}
+<div class="stack">
+  {% if board.celebrations %}
+  <section class="celebration-strip">
+    {% for person in board.celebrations %}
+    <span class="celebration-chip" data-search="{{ person.full_name|lower }} {{ person.position.department.name|lower }}">
+      {% if person.celebration_today.type == "birthday" %}{% icon "cake" "sm" %}Hoy cumple años <strong>{{ person.full_name }}</strong>{% else %}{% icon "award" "sm" %}<strong>{{ person.full_name }}</strong> cumple {{ person.celebration_today.years }} año{{ person.celebration_today.years|pluralize }} en la empresa{% endif %}
+    </span>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="kpis">
+    <div class="kpi kpi-accent"><span class="kpi-label">{% icon "door" "sm" %}Dentro ahora</span><span class="kpi-value">{{ board.inside|length }}</span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "logout" "sm" %}Salieron hoy</span><span class="kpi-value">{{ board.left|length }}</span></div>
+    <div class="kpi"><span class="kpi-label">{% icon "clock" "sm" %}Sin marcar hoy</span><span class="kpi-value">{{ board.absent|length }}</span><span class="kpi-meta">Activos o de vacaciones</span></div>
+  </section>
+
+  <div class="grid-3">
+    <section class="card">
+      <header class="card-header"><div><h2>Dentro</h2><p>Ordenados por hora de entrada</p></div><span class="badge badge-success">{{ board.inside|length }}</span></header>
+      <div class="list list-scroll list-tall">
+        {% for person in board.inside %}
+        <div class="list-item" data-search="{{ person.full_name|lower }} {{ person.position.department.name|lower }} {{ person.identification }}">
+          <span class="avatar">{% if person.photo %}<img src="{{ person.photo.url }}" alt="" loading="lazy">{% else %}{{ person.full_name|initials }}{% endif %}</span>
+          <div class="list-item-main"><strong>{{ person.full_name }}</strong><small>{{ person.position.department.name }} · {{ person.position.name }}</small></div>
+          <div class="list-item-side">{% if person.stale %}<span class="badge badge-warning">Sin salida</span>{% endif %}<span class="num">{{ person.last_mark_at|date:"H:i" }}{% if person.last_mark_at|date:"Ymd" != board.today|date:"Ymd" %} · {{ person.last_mark_at|date:"d/m" }}{% endif %}</span></div>
+        </div>
+        {% empty %}
+        <div class="empty">{% icon "door" %}<strong>No hay nadie dentro</strong></div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-header"><div><h2>Salieron hoy</h2><p>Entrada y salida de la jornada</p></div><span class="badge badge-info">{{ board.left|length }}</span></header>
+      <div class="list list-scroll list-tall">
+        {% for person in board.left %}
+        <div class="list-item" data-search="{{ person.full_name|lower }} {{ person.position.department.name|lower }} {{ person.identification }}">
+          <span class="avatar">{% if person.photo %}<img src="{{ person.photo.url }}" alt="" loading="lazy">{% else %}{{ person.full_name|initials }}{% endif %}</span>
+          <div class="list-item-main"><strong>{{ person.full_name }}</strong><small>{{ person.position.department.name }}</small></div>
+          <div class="list-item-side num"><span>{{ person.first_entry_today|date:"H:i"|default:"—" }} → {{ person.last_mark_at|date:"H:i" }}</span></div>
+        </div>
+        {% empty %}
+        <div class="empty">{% icon "logout" %}<strong>Nadie ha salido todavía</strong></div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="card-header"><div><h2>Sin marcar hoy</h2><p>No han pasado por la garita</p></div><span class="badge">{{ board.absent|length }}</span></header>
+      <div class="list list-scroll list-tall">
+        {% for person in board.absent %}
+        <div class="list-item" data-search="{{ person.full_name|lower }} {{ person.position.department.name|lower }} {{ person.identification }}">
+          <span class="avatar avatar-sm">{{ person.full_name|initials }}</span>
+          <div class="list-item-main"><strong>{{ person.full_name }}</strong><small>{{ person.position.department.name }}{% if person.status == "vacation" %} · De vacaciones{% endif %}</small></div>
+          <div class="list-item-side">{% if person.last_mark_at %}<span class="num">Última: {{ person.last_mark_at|date:"d/m H:i" }}</span>{% endif %}</div>
+        </div>
+        {% empty %}
+        <div class="empty">{% icon "check" %}<strong>Todos han marcado hoy</strong></div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>

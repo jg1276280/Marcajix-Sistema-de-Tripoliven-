@@ -107,6 +107,50 @@
       wrapper.append(input, button);
     });
 
+    // Campana de alertas: consulta cada 30 s y avisa de las nuevas (con sonido si son críticas).
+    const bell = document.getElementById('alert-bell');
+    if (bell) {
+      const counter = document.getElementById('alert-count');
+      const SEEN_KEY = 'marcajix.alerts.seen';
+      let seen = 0;
+      try { seen = Number(sessionStorage.getItem(SEEN_KEY) || 0); } catch (error) { /* sin almacenamiento */ }
+      const beep = () => {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const context = new AudioContext();
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.frequency.value = 660;
+        gain.gain.setValueAtTime(0.0001, context.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.08, context.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.35);
+        oscillator.connect(gain).connect(context.destination);
+        oscillator.start();
+        oscillator.stop(context.currentTime + 0.36);
+        oscillator.addEventListener('ended', () => context.close(), { once: true });
+      };
+      const check = async () => {
+        try {
+          const response = await fetch(bell.dataset.summaryUrl, { cache: 'no-store' });
+          if (!response.ok) return;
+          const data = await response.json();
+          counter.textContent = data.count;
+          counter.hidden = !data.count;
+          bell.classList.toggle('has-alerts', data.count > 0);
+          const fresh = data.latest.filter((alert) => alert.id > seen);
+          if (seen && fresh.length) {
+            fresh.reverse().forEach((alert) => toast(alert.title, alert.severity === 'critical' ? 'error' : 'warning', 10000));
+            if (fresh.some((alert) => alert.severity === 'critical')) beep();
+          }
+          const newest = Math.max(seen, ...data.latest.map((alert) => alert.id));
+          seen = newest || seen || 1;
+          try { sessionStorage.setItem(SEEN_KEY, String(seen)); } catch (error) { /* sin almacenamiento */ }
+        } catch (error) { /* se reintenta en el siguiente ciclo */ }
+      };
+      check();
+      setInterval(check, 30000);
+    }
+
     // Vista previa de fotos antes de subirlas: <input type="file" data-preview="id-img">.
     document.querySelectorAll('input[type="file"][data-preview]').forEach((input) => {
       input.addEventListener('change', () => {

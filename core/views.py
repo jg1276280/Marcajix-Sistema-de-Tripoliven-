@@ -20,7 +20,7 @@ from .forms import HIDReaderConfigForm, ProfileForm, ProfilePasswordForm, UserAc
 from .permissions import CONFIGURE_DEVICES, MANAGE_USERS, MONITOR_DOOR, REGISTER_ATTENDANCE, VIEW_ANALYTICS, VIEW_ATTENDANCE_HISTORY, VIEW_AUDIT, capability_required, has_capability
 from .security import reset_failed_logins
 from .models import AttendanceLog, HIDReaderConfig, SecurityEvent
-from .attendance import average_clock, daily_summaries, people_inside
+from .attendance import average_clock, daily_summaries, people_inside, presence_board
 from .live import reader_status, recent_events
 from .services import MANUAL_ATTENDANCE_WINDOW, AttendanceRegistrationError, register_attendance
 
@@ -400,6 +400,13 @@ def attendance_monitor(request):
     })
 
 
+@capability_required(MONITOR_DOOR)
+def presence(request):
+    """Tablero de presencia para los inspectores. Con ?partial=1 devuelve solo el contenido (autorrefresco)."""
+    template = "dashboard/partials/presence_board.html" if request.GET.get("partial") == "1" else "dashboard/presence.html"
+    return render(request, template, {"active_page": "presence", "board": presence_board()})
+
+
 @capability_required(REGISTER_ATTENDANCE)
 def attendance_register(request):
     if request.method != "POST":
@@ -464,7 +471,8 @@ def attendance_employee_search(request):
 
 @capability_required(VIEW_ATTENDANCE_HISTORY)
 def attendance_history(request):
-    logs = AttendanceLog.objects.select_related("employee__position__department", "registered_by")
+    # Incluye los anulados para que el historial muestre también las correcciones.
+    logs = AttendanceLog.all_objects.select_related("employee__position__department", "registered_by", "voided_by")
     attempts = SecurityEvent.objects.select_related("employee__position__department", "attempted_by")
     query = request.GET.get("q", "").strip()
     date_from = request.GET.get("from", "").strip()

@@ -1,3 +1,4 @@
+import calendar
 import re
 from datetime import date
 
@@ -145,6 +146,25 @@ class Employee(models.Model):
             self.SUSPENDED: "Acceso denegado: empleado suspendido.",
         }
         return messages[self.status]
+
+    def celebration(self, on_date):
+        """«birthday» si cumple años ese día, («anniversary», años) si cumple aniversario laboral, o None.
+
+        Quien nació o ingresó un 29 de febrero lo celebra el 28 en los años no bisiestos.
+        """
+        def matches(day):
+            if day is None:
+                return False
+            if (day.month, day.day) == (on_date.month, on_date.day):
+                return True
+            leap_day_in_common_year = (day.month, day.day) == (2, 29) and (on_date.month, on_date.day) == (2, 28)
+            return leap_day_in_common_year and not calendar.isleap(on_date.year)
+
+        if matches(self.birthday):
+            return {"type": "birthday", "years": on_date.year - self.birthday.year}
+        if matches(self.hire_date) and on_date.year > self.hire_date.year:
+            return {"type": "anniversary", "years": on_date.year - self.hire_date.year}
+        return None
 
     @property
     def has_important_history(self):

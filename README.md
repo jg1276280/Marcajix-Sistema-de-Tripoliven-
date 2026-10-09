@@ -74,6 +74,30 @@ No hace falta instalar nada: abra en el navegador `http://NOMBRE-PC-GARITA:8000/
 instalador muestra la dirección exacta al terminar). Si prefiere un acceso directo en el
 escritorio, copie la carpeta en esa PC, ejecute `INSTALAR.bat` y elija la opción **2**.
 
+## Funciones por rol
+
+- **Seguridad:** Garita (en vivo y registro manual), **Presencia** (dentro, salieron hoy, sin marcar),
+  Movimientos y **Alertas** de la puerta (accesos denegados, tarjetas desconocidas insistentes,
+  personas con demasiadas horas dentro y lector desconectado).
+- **Recursos Humanos:** Personal, fichas con horas y horas extra, Reportes con exportación a Excel y,
+  si Sistemas lo activa, **correcciones de marcajes** (añadir olvidos o anular errores, siempre con
+  motivo y registradas en la auditoría).
+- **Sistemas:** todo lo anterior, más Usuarios, Estructura, Lector HID, Auditoría y **Sistema**
+  (respaldos y activación de correcciones).
+- **Kiosco:** celebra con confeti el **cumpleaños** y el **aniversario laboral** de quien marca ese día.
+
+## Respaldos de la base de datos
+
+En **Sistema → Respaldos automáticos**: active el respaldo diario, pulse **Examinar…** para elegir la
+carpeta (o escriba la ruta de red `\\SERVIDOR\Carpeta`), pulse **Probar carpeta** y luego **Respaldar
+ahora** para comprobarlo. Marcajix borra solo sus respaldos más antiguos que los días indicados.
+
+- Use rutas de red completas: las letras de unidad conectadas (Z:) no existen para el servicio.
+- La cuenta de Windows con la que corre Marcajix necesita permiso de escritura en esa carpeta.
+- Si SQL Server está en otro servidor, la carpeta debe ser accesible también para la cuenta del
+  servicio de SQL Server de ese servidor.
+- Si un respaldo falla o pasan 48 h sin uno correcto, Sistemas recibe una alerta.
+
 ## Actualizar
 
 Doble clic en **`ACTUALIZAR.bat`**. Detiene el sistema, descarga la versión nueva (si se instaló

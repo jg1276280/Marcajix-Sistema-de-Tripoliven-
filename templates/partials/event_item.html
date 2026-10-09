@@ -1,7 +1,7 @@
 {% load ui %}<div class="list-item">
   <span class="avatar">{% if event.photo %}<img src="{{ event.photo }}" alt="" loading="lazy">{% else %}{{ event.name|initials }}{% endif %}</span>
   <div class="list-item-main">
-    <strong>{{ event.name|default:"Tarjeta no registrada" }}</strong>
+    <strong>{{ event.name|default:"Tarjeta no registrada" }}{% if event.celebration %} <span class="badge badge-warning">{% if event.celebration.type == "birthday" %}{% icon "cake" "sm" %}Cumpleaños{% else %}{% icon "award" "sm" %}{{ event.celebration.years }} año{{ event.celebration.years|pluralize }}{% endif %}</span>{% endif %}</strong>
     <small>{% if event.kind == "unknown_card" %}Código {{ event.card_code }}{% else %}{{ event.department }}{% if event.kind == "denied" %} · {{ event.message }}{% endif %}{% endif %}</small>
   </div>
   <div class="list-item-side">

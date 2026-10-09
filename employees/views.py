@@ -7,9 +7,15 @@ from django.db.models import Case, Count, IntegerField, Prefetch, Q, When
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404, redirect, render
-from datetime import timedelta
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.views.decorators.http import require_POST
+from django.core.exceptions import PermissionDenied
+from datetime import datetime, time, timedelta
 
-from core.permissions import MANAGE_EMPLOYEES, MANAGE_STRUCTURE, VIEW_ANALYTICS, VIEW_EMPLOYEES, capability_required
+from core.permissions import CORRECT_ATTENDANCE, MANAGE_EMPLOYEES, MANAGE_STRUCTURE, VIEW_ANALYTICS, VIEW_EMPLOYEES, capability_required, has_capability
+from core.services import AttendanceRegistrationError, add_correction, corrections_enabled, void_mark
 
 from core.attendance import PERIODS, daily_summaries, employee_totals, resolve_period
 from core.models import AttendanceLog
@@ -111,6 +117,8 @@ def employee_detail(request, pk):
     peak = max((by_day[day].worked_hours for day in chart_days if day in by_day), default=0) or 1
     chart = [{"day": day, "hours": by_day[day].worked_hours if day in by_day else 0, "percent": round((by_day[day].worked_hours if day in by_day else 0) / peak * 100)} for day in chart_days]
     latest = employee.attendance_logs.order_by("-marked_at", "-pk").first()
+    period_start = timezone.make_aware(datetime.combine(start, time.min))
+    period_end = timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min))
     return render(request, "dashboard/employees/detail.html", {
         "employee": employee,
         "period": period,
@@ -122,7 +130,9 @@ def employee_detail(request, pk):
         "chart": chart,
         "is_inside": latest is not None and latest.mark_type == AttendanceLog.ENTRY,
         "latest": latest,
-        "recent_marks": employee.attendance_logs.select_related("registered_by").order_by("-marked_at", "-pk")[:8],
+        "period_marks": employee.attendance_logs.select_related("registered_by").filter(marked_at__gte=period_start - timedelta(days=1), marked_at__lt=period_end + timedelta(days=1)).order_by("-marked_at", "-pk")[:60],
+        "can_correct": has_capability(request.user, CORRECT_ATTENDANCE) and corrections_enabled(),
+        "now_local": timezone.localtime().strftime("%Y-%m-%dT%H:%M"),
         "workday_hours": settings.ATTENDANCE_WORKDAY_HOURS,
         "active_page": "employees",
     })
@@ -181,3 +191,48 @@ def structure_settings(request):
         "structure_edit_form": form if editing else None,
         "active_page": "structure",
     })
+
+
+def _require_corrections(request):
+    if not corrections_enabled():
+        raise PermissionDenied("Las correcciones de marcajes están desactivadas.")
+
+
+def _back_to_detail(request, employee_pk):
+    target = request.POST.get("next", "")
+    return redirect(target if target.startswith("/dashboard/empleados/") else reverse("employees:detail", args=[employee_pk]))
+
+
+@require_POST
+@capability_required(CORRECT_ATTENDANCE)
+def attendance_correction_add(request, pk):
+    _require_corrections(request)
+    employee = get_object_or_404(Employee, pk=pk)
+    marked_at = parse_datetime(request.POST.get("marked_at", ""))
+    if marked_at is not None and timezone.is_naive(marked_at):
+        marked_at = timezone.make_aware(marked_at)
+    try:
+        if marked_at is None:
+            raise AttendanceRegistrationError("Indique una fecha y hora válidas.")
+        log = add_correction(employee.pk, marked_at, request.POST.get("mark_type"), request.POST.get("reason"), request.user)
+    except AttendanceRegistrationError as error:
+        messages.error(request, f"No se añadió el marcaje: {error}")
+    else:
+        messages.success(request, f"Se añadió una {log.get_mark_type_display()} el {timezone.localtime(log.marked_at):%d/%m/%Y a las %H:%M}.")
+    return _back_to_detail(request, employee.pk)
+
+
+@require_POST
+@capability_required(CORRECT_ATTENDANCE)
+def attendance_correction_void(request, pk, log_pk):
+    _require_corrections(request)
+    employee = get_object_or_404(Employee, pk=pk)
+    if not AttendanceLog.objects.filter(pk=log_pk, employee=employee).exists():
+        raise PermissionDenied
+    try:
+        log = void_mark(log_pk, request.POST.get("reason"), request.user)
+    except AttendanceRegistrationError as error:
+        messages.error(request, f"No se anuló el marcaje: {error}")
+    else:
+        messages.success(request, f"Se anuló la {log.get_mark_type_display()} del {timezone.localtime(log.marked_at):%d/%m/%Y %H:%M}.")
+    return _back_to_detail(request, employee.pk)

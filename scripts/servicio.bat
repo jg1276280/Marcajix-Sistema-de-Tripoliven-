@@ -21,6 +21,8 @@ if exist "%LOG%" for %%F in ("%LOG%") do if %%~zF GTR 10485760 move /y "%LOG%" "
 
 echo [%date% %time%] Iniciando %~1 >> "%LOG%"
 if /i "%~1"=="web" (
+    rem El servidor web tambien ejecuta los respaldos programados y las alertas.
+    set MARCAJIX_BACKGROUND_TASKS=1
     "%PY%" -m waitress --listen=*:8000 --threads=8 config.wsgi:application >> "%LOG%" 2>&1
 ) else (
     "%PY%" manage.py listen_hid >> "%LOG%" 2>&1

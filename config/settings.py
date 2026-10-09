@@ -68,6 +68,9 @@ ATTENDANCE_WORKDAY_HOURS = float(os.getenv("ATTENDANCE_WORKDAY_HOURS", "8"))
 ATTENDANCE_MAX_SESSION_HOURS = float(os.getenv("ATTENDANCE_MAX_SESSION_HOURS", "16"))
 # Una tarjeta leída de nuevo antes de estos segundos desde su último marcaje se ignora (doble pasada).
 HID_REPEAT_SECONDS = int(os.getenv("HID_REPEAT_SECONDS", "60"))
+# Carpeta intermedia donde SQL Server (local) deja el .bak antes de copiarlo a la carpeta elegida.
+# La crea el instalador con permisos para el servicio de SQL Server y para Marcajix.
+BACKUP_STAGING_DIR = os.getenv("BACKUP_STAGING_DIR", r"C:\ProgramData\Marcajix\temp-respaldos" if os.name == "nt" else "")
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"

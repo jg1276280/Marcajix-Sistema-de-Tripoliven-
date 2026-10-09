@@ -48,6 +48,14 @@
     .dot { display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.5em; border-radius: 50%; background: var(--muted); vertical-align: -0.05em; }
     .dot.ok { background: var(--entry); }
     .dot.bad { background: var(--brand); }
+    /* Celebración: cumpleaños y aniversario laboral */
+    .celebration { display: none; margin-top: 3vh; padding: 2vh 2vw; border-radius: 20px; background: linear-gradient(100deg, #fff7ed, #fdecee 60%, #fff1f2); border: 1px solid #f9d9b5; }
+    .celebration.is-visible { display: block; animation: pop 0.5s cubic-bezier(.2, 1.4, .4, 1); }
+    .celebration-title { font-size: clamp(30px, 3.6vw, 66px); font-weight: 800; letter-spacing: -0.02em; color: var(--brand); }
+    .celebration-text { margin-top: 0.6vh; font-size: clamp(18px, 1.8vw, 32px); color: #9a3412; }
+    @keyframes pop { from { opacity: 0; transform: scale(0.85) translateY(10px); } to { opacity: 1; transform: none; } }
+    .card.is-celebrating .photo { box-shadow: 0 0 0 8px #fde68a, 0 0 0 16px #fdecee; }
+    #confetti { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 5; }
   </style>
 </head>
 <body>
@@ -71,6 +79,10 @@
           <div class="meta" id="meta"></div>
           <div class="time" id="time"></div>
           <div class="message" id="message"></div>
+          <div class="celebration" id="celebration" aria-live="polite">
+            <div class="celebration-title" id="celebration-title"></div>
+            <div class="celebration-text" id="celebration-text"></div>
+          </div>
         </div>
       </section>
     </main>
@@ -81,6 +93,7 @@
     </footer>
   </div>
 
+  <canvas id="confetti" aria-hidden="true"></canvas>
   <script>
     const FEED_URL = '{{ feed_url }}';
     // Misma zona horaria que el servidor, para que el reloj coincida con la hora de los marcajes.
@@ -89,6 +102,7 @@
     })();
     const POLL_MS = 1000;
     const SHOW_MS = 6000;
+    const CELEBRATION_MS = 9000;
     const QUEUED_SHOW_MS = 3500;
     const LABELS = { entry: 'ENTRADA', exit: 'SALIDA', denied: 'ACCESO DENEGADO', unknown_card: 'TARJETA NO RECONOCIDA' };
     const $ = (id) => document.getElementById(id);
@@ -120,6 +134,74 @@
       }
     };
 
+    // ---------- Celebraciones ----------
+    const firstName = (name) => (name || '').split(' ')[0];
+    const renderCelebration = (event) => {
+      const box = $('celebration');
+      const party = event.celebration;
+      $('card').classList.toggle('is-celebrating', Boolean(party));
+      if (!party) {
+        box.classList.remove('is-visible');
+        return false;
+      }
+      if (party.type === 'birthday') {
+        $('celebration-title').textContent = `¡Feliz cumpleaños, ${firstName(event.name)}!`;
+        $('celebration-text').textContent = 'Todo el equipo de Tripoliven te desea un gran día.';
+      } else {
+        $('celebration-title').textContent = `¡Feliz aniversario, ${firstName(event.name)}!`;
+        $('celebration-text').textContent = `Hoy cumples ${party.years} año${party.years === 1 ? '' : 's'} con nosotros. ¡Gracias por tu esfuerzo!`;
+      }
+      box.classList.remove('is-visible');
+      void box.offsetWidth;  // Reinicia la animación si hay dos celebraciones seguidas.
+      box.classList.add('is-visible');
+      launchConfetti(party.type === 'birthday' ? ['#c8102e', '#f59e0b', '#ec4899', '#3b82f6', '#10b981'] : ['#c8102e', '#b45309', '#f59e0b', '#fde68a', '#111827']);
+      return true;
+    };
+
+    // Confeti ligero en un canvas (sin librerías externas).
+    const canvas = $('confetti');
+    const context = canvas.getContext('2d');
+    let pieces = [];
+    let animating = false;
+    const launchConfetti = (colors) => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      for (let index = 0; index < 220; index += 1) {
+        pieces.push({
+          x: Math.random() * canvas.width,
+          y: -20 - Math.random() * canvas.height * 0.6,
+          size: 6 + Math.random() * 8,
+          color: colors[index % colors.length],
+          speed: 2 + Math.random() * 3.5,
+          drift: -1.2 + Math.random() * 2.4,
+          angle: Math.random() * Math.PI,
+          spin: -0.15 + Math.random() * 0.3,
+        });
+      }
+      if (!animating) { animating = true; requestAnimationFrame(drawConfetti); }
+    };
+    const drawConfetti = () => {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      pieces.forEach((piece) => {
+        piece.y += piece.speed;
+        piece.x += piece.drift + Math.sin(piece.y / 40);
+        piece.angle += piece.spin;
+        context.save();
+        context.translate(piece.x, piece.y);
+        context.rotate(piece.angle);
+        context.fillStyle = piece.color;
+        context.fillRect(-piece.size / 2, -piece.size / 4, piece.size, piece.size / 2);
+        context.restore();
+      });
+      pieces = pieces.filter((piece) => piece.y < canvas.height + 30);
+      if (pieces.length) {
+        requestAnimationFrame(drawConfetti);
+      } else {
+        animating = false;
+        context.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
+
     const showNext = () => {
       const event = queue.shift();
       if (!event) {
@@ -136,9 +218,10 @@
       $('meta').textContent = [event.department, event.position].filter(Boolean).join(' · ') || (event.card_code ? `Código ${event.card_code}` : '');
       $('time').textContent = event.time;
       $('message').textContent = event.kind === 'denied' ? event.message : (event.kind === 'unknown_card' ? 'Diríjase al personal de seguridad.' : '');
+      const party = renderCelebration(event);
       $('idle').style.display = 'none';
       $('card').classList.add('is-visible');
-      setTimeout(showNext, queue.length ? QUEUED_SHOW_MS : SHOW_MS);
+      setTimeout(showNext, party ? CELEBRATION_MS : (queue.length ? QUEUED_SHOW_MS : SHOW_MS));
     };
 
     const setStatus = (dotId, labelId, ok, label) => {

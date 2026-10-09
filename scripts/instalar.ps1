@@ -281,6 +281,7 @@ try {
     Write-Step 'Base de datos'
     Initialize-Database $localExpress
     Invoke-Manage @('migrate', '--noinput')
+    Initialize-BackupStaging | Out-Null
     Invoke-Manage @('collectstatic', '--noinput', '--verbosity', '0')
     Write-Ok 'Base de datos y archivos estáticos listos.'
     if (Read-YesNo '¿Crear ahora un usuario administrador (rol Sistemas)?' $true) {

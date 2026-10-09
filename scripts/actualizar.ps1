@@ -41,6 +41,8 @@ try {
         Pop-Location
     }
 
+    Initialize-BackupStaging | Out-Null
+
     Write-Step 'Iniciando Marcajix'
     Get-ScheduledTask -TaskPath '\Marcajix\' | Start-ScheduledTask
     if (Wait-Server 'http://localhost:8000/login/' 60) { Write-Ok 'Marcajix actualizado y funcionando.' }

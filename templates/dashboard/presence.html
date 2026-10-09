@@ -1,0 +1,35 @@
+{% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Presencia{% endblock %}
+{% block page_title %}Presencia{% endblock %}
+{% block page_subtitle %}<p>Quién está dentro, quién ya salió y quién no ha marcado hoy · se actualiza sola</p>{% endblock %}
+{% block page_actions %}
+  <div class="search">{% icon "search" %}<input id="presence-filter" class="input" type="search" placeholder="Filtrar por nombre o departamento" aria-label="Filtrar personas"></div>
+{% endblock %}
+
+{% block page_content %}
+<div id="presence-board">{% include "dashboard/partials/presence_board.html" %}</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const board = document.getElementById('presence-board');
+  const filter = document.getElementById('presence-filter');
+  const applyFilter = () => {
+    const query = filter.value.trim().toLowerCase();
+    board.querySelectorAll('[data-search]').forEach((item) => { item.hidden = Boolean(query) && !item.dataset.search.includes(query); });
+  };
+  filter.addEventListener('input', applyFilter);
+  // Actualiza el tablero cada 20 segundos sin recargar la página ni perder el filtro.
+  setInterval(async () => {
+    try {
+      const response = await fetch('?partial=1', { cache: 'no-store' });
+      if (!response.ok) return;
+      board.innerHTML = await response.text();
+      applyFilter();
+    } catch (error) { /* se reintenta en el siguiente ciclo */ }
+  }, 20000);
+})();
+</script>
+{% endblock %}

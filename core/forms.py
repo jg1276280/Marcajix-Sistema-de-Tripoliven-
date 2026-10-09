@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import Error as DatabaseError
 
-from .models import HIDReaderConfig
+from .models import HIDReaderConfig, SystemSettings
 from .permissions import ROLES, SYSTEMS, user_role
 from .security import locked_until, register_failed_login, reset_failed_logins
 
@@ -134,3 +134,26 @@ class HIDReaderConfigForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             field.widget.attrs.setdefault("class", "checkbox" if name == "is_active" else "select" if isinstance(field.widget, forms.Select) else "input")
+
+
+class SystemSettingsForm(forms.ModelForm):
+    class Meta:
+        model = SystemSettings
+        fields = ("backup_enabled", "backup_path", "backup_time", "backup_retention_days", "allow_attendance_corrections")
+        widgets = {
+            "backup_path": forms.TextInput(attrs={"placeholder": "\\\\SERVIDOR\\Respaldos\\Marcajix", "id": "backup-path", "autocomplete": "off", "spellcheck": "false"}),
+            "backup_time": forms.TimeInput(attrs={"type": "time"}, format="%H:%M"),
+            "backup_retention_days": forms.NumberInput(attrs={"min": "1", "max": "3650"}),
+        }
+
+    def clean_backup_retention_days(self):
+        value = self.cleaned_data["backup_retention_days"]
+        if value < 1:
+            raise ValidationError("Conserve los respaldos al menos 1 día.")
+        return value
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if cleaned_data.get("backup_enabled") and not (cleaned_data.get("backup_path") or "").strip():
+            self.add_error("backup_path", "Indique la carpeta donde se guardarán los respaldos.")
+        return cleaned_data

@@ -61,12 +61,15 @@
             <td class="muted">{{ record.reason }}{% if record.attempted_by %} · @{{ record.attempted_by.username }}{% endif %}</td>
           </tr>
           {% else %}
-          <tr>
+          <tr {% if record.voided_at %}class="is-voided"{% endif %}>
             <td><div class="cell-person"><span class="avatar avatar-sm">{{ record.employee.full_name|initials }}</span><div><strong>{{ record.employee.full_name }}</strong><small class="mono">{{ record.employee.hid_card_code|default:"Sin tarjeta" }}</small></div></div></td>
             <td>{{ record.employee.department }}</td>
-            <td>{% if record.mark_type == "entry" %}<span class="badge badge-success">Entrada</span>{% else %}<span class="badge badge-info">Salida</span>{% endif %}</td>
+            <td>{% if record.mark_type == "entry" %}<span class="badge badge-success">Entrada</span>{% else %}<span class="badge badge-info">Salida</span>{% endif %}{% if record.voided_at %} <span class="badge badge-danger">Anulado</span>{% endif %}</td>
             <td class="num nowrap">{{ record.marked_at|date:"d/m/Y H:i:s" }}</td>
-            <td class="muted">{% if record.capture_mode == "hid" %}Lector de tarjetas{% else %}Manual{% if record.registered_by %} · @{{ record.registered_by.username }}{% endif %}{% endif %}</td>
+            <td class="muted">
+              {% if record.capture_mode == "hid" %}Lector de tarjetas{% elif record.capture_mode == "correction" %}Corrección: {{ record.correction_reason }}{% else %}Manual{% endif %}{% if record.registered_by and record.capture_mode != "hid" %} · @{{ record.registered_by.username }}{% endif %}
+              {% if record.voided_at %}<small class="block text-danger">Anulado por @{{ record.voided_by.username|default:"—" }}: {{ record.void_reason }}</small>{% endif %}
+            </td>
           </tr>
           {% endif %}
           {% endwith %}

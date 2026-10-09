@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
@@ -52,13 +54,21 @@ class UserSecurity(models.Model):
         return f"Security for {self.user.username}"
 
 
+class ValidAttendanceManager(models.Manager):
+    """Por defecto se excluyen los marcajes anulados: no cuentan para horas, presencia ni reportes."""
+
+    def get_queryset(self):
+        return super().get_queryset().filter(voided_at__isnull=True)
+
+
 class AttendanceLog(models.Model):
     ENTRY = "entry"
     EXIT = "exit"
     MARK_TYPES = ((ENTRY, "Entrada"), (EXIT, "Salida"))
     HID = "hid"
     MANUAL = "manual"
-    CAPTURE_MODES = ((HID, "Lector HID"), (MANUAL, "Registro manual"))
+    CORRECTION = "correction"
+    CAPTURE_MODES = ((HID, "Lector HID"), (MANUAL, "Registro manual"), (CORRECTION, "Corrección de RRHH"))
 
     # El índice compuesto attendance_latest_idx ya cubre las búsquedas por empleado.
     employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT, related_name="attendance_logs", db_index=False)
@@ -67,6 +77,14 @@ class AttendanceLog(models.Model):
     source = models.CharField("Origen / dispositivo", max_length=120, default="Registro manual")
     capture_mode = models.CharField("Modo de captura", max_length=10, choices=CAPTURE_MODES, default=MANUAL)
     registered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_registrations")
+    correction_reason = models.CharField("Motivo de la corrección", max_length=255, blank=True)
+    # Anulación lógica: el marcaje original se conserva para la auditoría.
+    voided_at = models.DateTimeField("Anulado el", null=True, blank=True)
+    voided_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="voided_attendance_logs")
+    void_reason = models.CharField("Motivo de la anulación", max_length=255, blank=True)
+
+    objects = ValidAttendanceManager()
+    all_objects = models.Manager()
 
     class Meta:
         db_table = "core_attendance_log"
@@ -108,3 +126,70 @@ class SecurityEvent(models.Model):
 
     def __str__(self):
         return f"{self.get_event_type_display()} - {self.employee or self.hid_card_code}"
+
+
+class SystemSettings(models.Model):
+    """Configuración general editable desde la interfaz por el rol Sistemas (registro único)."""
+
+    backup_enabled = models.BooleanField("Respaldos automáticos activos", default=False)
+    backup_path = models.CharField("Carpeta de respaldos", max_length=400, blank=True, help_text="Ruta local o de red, p. ej. \\\\SERVIDOR\\Respaldos\\Marcajix")
+    backup_time = models.TimeField("Hora del respaldo diario", default=time(23, 0))
+    backup_retention_days = models.PositiveSmallIntegerField("Conservar respaldos (días)", default=30)
+    last_backup_attempt_at = models.DateTimeField("Último intento de respaldo", null=True, blank=True)
+    last_backup_ok_at = models.DateTimeField("Último respaldo correcto", null=True, blank=True)
+    last_backup_status = models.CharField("Estado del último respaldo", max_length=10, blank=True)
+    last_backup_message = models.CharField("Detalle del último respaldo", max_length=500, blank=True)
+    last_backup_file = models.CharField("Último archivo de respaldo", max_length=500, blank=True)
+
+    allow_attendance_corrections = models.BooleanField("Permitir correcciones de marcajes", default=False)
+
+    class Meta:
+        db_table = "core_system_settings"
+        verbose_name = "Configuración del sistema"
+        verbose_name_plural = "Configuración del sistema"
+
+    def __str__(self):
+        return "Configuración del sistema"
+
+    @classmethod
+    def load(cls):
+        settings_obj, _ = cls.objects.get_or_create(pk=1)
+        return settings_obj
+
+
+class Alert(models.Model):
+    """Aviso que requiere atención. `key` evita duplicados mientras la alerta sigue abierta."""
+
+    DOOR = "door"
+    SYSTEM = "system"
+    AUDIENCES = ((DOOR, "Garita"), (SYSTEM, "Sistema"))
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+    SEVERITIES = ((INFO, "Información"), (WARNING, "Advertencia"), (CRITICAL, "Crítica"))
+
+    key = models.CharField(max_length=120, db_index=True)
+    kind = models.CharField("Tipo", max_length=30)
+    audience = models.CharField("Para", max_length=10, choices=AUDIENCES)
+    severity = models.CharField("Gravedad", max_length=10, choices=SEVERITIES, default=WARNING)
+    title = models.CharField("Título", max_length=160)
+    message = models.CharField("Detalle", max_length=500, blank=True)
+    employee = models.ForeignKey("employees.Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="alerts")
+    created_at = models.DateTimeField("Fecha", auto_now_add=True)
+    resolved_at = models.DateTimeField("Resuelta", null=True, blank=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="resolved_alerts")
+    auto_resolved = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "core_alert"
+        ordering = ("-created_at", "-pk")
+        indexes = [models.Index(fields=("resolved_at", "audience"), name="alert_open_idx")]
+        verbose_name = "Alerta"
+        verbose_name_plural = "Alertas"
+
+    def __str__(self):
+        return self.title
+
+    @property
+    def is_open(self):
+        return self.resolved_at is None

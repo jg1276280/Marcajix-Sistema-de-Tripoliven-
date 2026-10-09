@@ -189,7 +189,8 @@ class AttendanceTests(TestCase):
         self.assertEqual(AttendanceLog.objects.filter(employee=self.employee).count(), 2)
 
     def test_historical_marks_are_validated_against_their_chronological_session(self):
-        today = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        # Un momento ya pasado: con una hora fija (p. ej. las 9:00) la prueba fallaba de madrugada.
+        today = (timezone.now() - timedelta(minutes=5)).replace(microsecond=0)
         yesterday_entry = today - timedelta(days=1, hours=1)
         yesterday_exit = today - timedelta(days=1, minutes=1)
 
@@ -225,8 +226,8 @@ class AttendanceTests(TestCase):
 
     def test_attendance_page_does_not_preload_unused_attendance_data(self):
         self.client.force_login(self.user)
-        # Sesión, usuario, rol, estado del lector y los últimos movimientos/alertas (con límite fijo).
-        with self.assertNumQueries(9):
+        # Sesión, usuario, rol, alertas abiertas, estado del lector y los últimos movimientos (con límite fijo).
+        with self.assertNumQueries(10):
             response = self.client.get("/dashboard/marcajes/")
         self.assertEqual(response.status_code, 200)
 

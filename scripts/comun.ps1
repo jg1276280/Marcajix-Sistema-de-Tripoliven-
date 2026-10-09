@@ -39,6 +39,16 @@ function Invoke-NativeQuiet([scriptblock]$Command) {
     }
 }
 
+function Initialize-BackupStaging {
+    # Carpeta intermedia de respaldos: SQL Server (servicio) escribe el .bak y Marcajix lo copia a la
+    # carpeta elegida en la interfaz. Se da permiso de modificación a todos los usuarios y servicios
+    # locales (SID S-1-1-0); solo contiene archivos temporales que se borran tras cada copia.
+    $path = Join-Path $env:ProgramData 'Marcajix\temp-respaldos'
+    New-Item -ItemType Directory -Path $path -Force | Out-Null
+    Invoke-NativeQuiet { & icacls $path /grant '*S-1-1-0:(OI)(CI)M' } | Out-Null
+    return $path
+}
+
 function Write-Utf8File([string]$Path, [string]$Content) {
     [IO.File]::WriteAllText($Path, $Content, (New-Object Text.UTF8Encoding $false))
 }

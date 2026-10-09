@@ -104,3 +104,62 @@ def register_attendance(employee_id, marked_at, mark_type, source="Registro manu
             return AttendanceLog.objects.create(employee=employee, marked_at=marked_at, mark_type=mark_type, source=source[:120], capture_mode=capture_mode, registered_by=registered_by)
     # Fuera de la transacción del marcaje: el intento bloqueado debe quedar guardado aunque se lance el error.
     _record_blocked_attempt(employee, mark_type, source, registered_by)
+
+
+# ---------------------------------------------------------------------------
+# Correcciones de Recursos Humanos (solo si Sistemas las activa).
+# ---------------------------------------------------------------------------
+MIN_REASON_LENGTH = 5
+
+
+def corrections_enabled():
+    from .models import SystemSettings
+
+    return SystemSettings.load().allow_attendance_corrections
+
+
+def _clean_reason(reason):
+    reason = " ".join((reason or "").split())
+    if len(reason) < MIN_REASON_LENGTH:
+        raise AttendanceRegistrationError("Indique el motivo de la corrección (mínimo 5 caracteres).", code="reason_required")
+    return reason[:255]
+
+
+def _audit_correction(user, log, message):
+    LogEntry.objects.log_action(user_id=user.pk, content_type_id=ContentType.objects.get_for_model(AttendanceLog).pk, object_id=log.pk, object_repr=f"{log.employee.full_name} · {timezone.localtime(log.marked_at):%d/%m/%Y %H:%M}", action_flag=CHANGE, change_message=message)
+
+
+def add_correction(employee_id, marked_at, mark_type, reason, user):
+    """Añade un marcaje olvidado. Debe alternar con el marcaje anterior y con el siguiente."""
+    reason = _clean_reason(reason)
+    if mark_type not in (AttendanceLog.ENTRY, AttendanceLog.EXIT):
+        raise AttendanceRegistrationError("Indique si es Entrada o Salida.", code="invalid_mark_type")
+    if marked_at > timezone.now():
+        raise AttendanceRegistrationError("La fecha no puede ser futura.", code="future")
+    with transaction.atomic():
+        employee = Employee.objects.select_for_update().filter(pk=employee_id).first()
+        if employee is None:
+            raise AttendanceRegistrationError("El empleado no existe.", code="not_found")
+        _validate_mark_transition(employee, latest_mark(employee, until=marked_at), marked_at, mark_type)
+        following = employee.attendance_logs.filter(marked_at__gt=marked_at).order_by("marked_at", "pk").first()
+        if following is not None and following.mark_type == mark_type:
+            label = following.get_mark_type_display()
+            raise AttendanceRegistrationError(f"El marcaje siguiente ({timezone.localtime(following.marked_at):%d/%m %H:%M}) ya es una {label}: no puede haber dos seguidas.", employee=employee, code="sequence")
+        log = AttendanceLog.objects.create(employee=employee, marked_at=marked_at, mark_type=mark_type, source="Corrección de RRHH", capture_mode=AttendanceLog.CORRECTION, registered_by=user, correction_reason=reason)
+        _audit_correction(user, log, f"Corrección: se añadió una {log.get_mark_type_display()} para {employee.full_name}. Motivo: {reason}")
+    return log
+
+
+def void_mark(log_id, reason, user):
+    """Anula un marcaje erróneo. No se borra: deja de contar y queda en el historial y la auditoría."""
+    reason = _clean_reason(reason)
+    with transaction.atomic():
+        log = AttendanceLog.objects.select_for_update().select_related("employee").filter(pk=log_id).first()
+        if log is None:
+            raise AttendanceRegistrationError("El marcaje no existe o ya fue anulado.", code="not_found")
+        log.voided_at = timezone.now()
+        log.voided_by = user
+        log.void_reason = reason
+        log.save(update_fields=["voided_at", "voided_by", "void_reason"])
+        _audit_correction(user, log, f"Corrección: se anuló una {log.get_mark_type_display()} de {log.employee.full_name}. Motivo: {reason}")
+    return log

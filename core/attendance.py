@@ -238,3 +238,39 @@ def resolve_period(params, default="week"):
                 start, end = end, start
             return period, start, min(end, start + timedelta(days=366))
     return "week", today - timedelta(days=today.weekday()), today
+
+
+def presence_board(now=None):
+    """Situación de hoy en la puerta: quién está dentro, quién ya salió y quién no ha marcado."""
+    from django.db.models import Min, Q
+
+    now = now or timezone.now()
+    today = timezone.localdate(now)
+    today_start, _ = _day_bounds(today, today)
+    latest = AttendanceLog.objects.filter(employee_id=OuterRef("pk")).order_by("-marked_at", "-pk")
+    employees = list(
+        Employee.objects.with_structure()
+        .filter(status__in=Employee.ACCESS_ALLOWED_STATUSES)
+        .annotate(
+            last_mark=Subquery(latest.values("mark_type")[:1]),
+            last_mark_at=Subquery(latest.values("marked_at")[:1]),
+            first_entry_today=Min("attendance_logs__marked_at", filter=Q(attendance_logs__mark_type=AttendanceLog.ENTRY, attendance_logs__marked_at__gte=today_start, attendance_logs__voided_at__isnull=True)),
+        )
+        .order_by("full_name")
+    )
+    limit = max_session()
+    inside, left, absent, celebrations = [], [], [], []
+    for employee in employees:
+        employee.celebration_today = employee.celebration(today)
+        if employee.celebration_today:
+            celebrations.append(employee)
+        if employee.last_mark == AttendanceLog.ENTRY:
+            employee.stale = now - employee.last_mark_at > limit
+            inside.append(employee)
+        elif employee.last_mark == AttendanceLog.EXIT and employee.last_mark_at >= today_start:
+            left.append(employee)
+        else:
+            absent.append(employee)
+    inside.sort(key=lambda item: item.last_mark_at, reverse=True)
+    left.sort(key=lambda item: item.last_mark_at, reverse=True)
+    return {"inside": inside, "left": left, "absent": absent, "celebrations": celebrations, "today": today}

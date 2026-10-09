@@ -36,13 +36,22 @@ def _employee_payload(employee):
 
 def _event_payload(kind, occurred_at, employee=None, message="", card_code=""):
     local = timezone.localtime(occurred_at)
-    return {"kind": kind, "at": local.isoformat(), "time": local.strftime("%H:%M:%S"), "date": local.strftime("%d/%m/%Y"), "message": message, "card_code": card_code, **_employee_payload(employee)}
+    payload = {"kind": kind, "at": local.isoformat(), "time": local.strftime("%H:%M:%S"), "date": local.strftime("%d/%m/%Y"), "message": message, "card_code": card_code, "celebration": None, **_employee_payload(employee)}
+    if employee is not None and kind in (AttendanceLog.ENTRY, AttendanceLog.EXIT):
+        # Cumpleaños o aniversario laboral: el kiosco lo celebra con una animación.
+        payload["celebration"] = employee.celebration(local.date())
+    return payload
+
+
+def _door_logs():
+    """Marcajes que se ven en la garita: las correcciones de RRHH no son movimientos en vivo."""
+    return AttendanceLog.objects.exclude(capture_mode=AttendanceLog.CORRECTION).select_related("employee__position__department")
 
 
 def recent_events(limit=10):
     """Últimos movimientos y alertas de la garita, del más reciente al más antiguo."""
     structure = ("employee__position__department",)
-    events = [(log.marked_at, _event_payload(log.mark_type, log.marked_at, log.employee)) for log in AttendanceLog.objects.select_related(*structure).order_by("-pk")[:limit]]
+    events = [(log.marked_at, _event_payload(log.mark_type, log.marked_at, log.employee)) for log in _door_logs().order_by("-pk")[:limit]]
     for event in SecurityEvent.objects.select_related(*structure).order_by("-pk")[:limit]:
         if event.event_type == SecurityEvent.UNKNOWN_CARD:
             events.append((event.occurred_at, _event_payload("unknown_card", event.occurred_at, message="Tarjeta no reconocida", card_code=event.hid_card_code)))
@@ -72,7 +81,7 @@ def build_feed(log_cursor, event_cursor):
         return {"events": [], "cursor": {"log": latest_log, "event": latest_event}, "reader": reader_status()}
 
     structure = ("employee__position__department",)
-    logs = list(AttendanceLog.objects.select_related(*structure).filter(pk__gt=log_cursor).order_by("pk")[:FEED_BATCH_SIZE])
+    logs = list(_door_logs().filter(pk__gt=log_cursor).order_by("pk")[:FEED_BATCH_SIZE])
     security_events = list(SecurityEvent.objects.select_related(*structure).filter(pk__gt=event_cursor).order_by("pk")[:FEED_BATCH_SIZE])
     events = [_event_payload(log.mark_type, log.marked_at, log.employee) for log in logs]
     for event in security_events:

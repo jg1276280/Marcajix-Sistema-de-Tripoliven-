@@ -1,0 +1,43 @@
+{% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Alertas{% endblock %}
+{% block page_title %}Alertas{% endblock %}
+{% block page_subtitle %}<p>Situaciones que requieren atención en la garita y en el sistema</p>{% endblock %}
+
+{% block page_content %}
+<div class="stack">
+  <div class="row-between">
+    <div class="segmented" role="group" aria-label="Ver">
+      <a class="{% if show == 'open' %}active{% endif %}" href="?show=open">Abiertas ({{ open_count }})</a>
+      <a class="{% if show == 'resolved' %}active{% endif %}" href="?show=resolved">Resueltas (7 días)</a>
+    </div>
+    {% if show == "open" and open_count > 1 %}
+    <form method="post" action="{% url 'alert_resolve_all' %}" data-confirm="¿Marcar las {{ open_count }} alertas como atendidas?">{% csrf_token %}<button class="btn btn-secondary btn-sm" type="submit">{% icon "check" "sm" %}Atender todas</button></form>
+    {% endif %}
+  </div>
+
+  <section class="card">
+    {% for alert in alerts %}
+    <article class="alert-row {{ alert.severity }}">
+      <span class="alert-icon">{% if alert.kind == "denied" %}{% icon "shield" %}{% elif alert.kind == "unknown_card" %}{% icon "card" %}{% elif alert.kind == "long_stay" %}{% icon "clock" %}{% elif alert.kind == "reader_offline" %}{% icon "plug" %}{% else %}{% icon "database" %}{% endif %}</span>
+      <div class="alert-main">
+        <strong>{{ alert.title }}</strong>
+        {% if alert.message %}<p>{{ alert.message }}</p>{% endif %}
+        <span class="alert-meta">
+          {{ alert.created_at|date:"d/m/Y H:i" }} · {{ alert.get_audience_display }}
+          {% if alert.resolved_at %} · {% if alert.auto_resolved %}Se resolvió sola el {{ alert.resolved_at|date:"d/m H:i" }}{% else %}Atendida por @{{ alert.resolved_by.username|default:"—" }} el {{ alert.resolved_at|date:"d/m H:i" }}{% endif %}{% endif %}
+        </span>
+      </div>
+      {% if not alert.resolved_at %}
+      <div class="row">
+        {% if alert.employee_id and access.view_analytics %}<a class="btn btn-ghost btn-sm" href="{% url 'employees:detail' alert.employee_id %}">Ver ficha</a>{% endif %}
+        <form method="post" action="{% url 'alert_resolve' alert.pk %}">{% csrf_token %}<button class="btn btn-secondary btn-sm" type="submit">{% icon "check" "sm" %}Atendida</button></form>
+      </div>
+      {% endif %}
+    </article>
+    {% empty %}
+    <div class="empty">{% icon "check" %}<strong>{% if show == "open" %}Todo en orden{% else %}Sin alertas resueltas recientemente{% endif %}</strong><span>{% if show == "open" %}No hay alertas abiertas.{% endif %}</span></div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

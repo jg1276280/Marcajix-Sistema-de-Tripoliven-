@@ -74,7 +74,7 @@
                 <td class="num">{% if day.is_open %}<span class="badge badge-success">Dentro</span>{% else %}{{ day.last_exit|date:"H:i"|default:"—" }}{% endif %}</td>
                 <td class="right num"><strong>{{ day.worked_hours|hm }}</strong></td>
                 <td class="right num">{% if day.overtime_hours %}<span class="badge badge-brand">+{{ day.overtime_hours|hm }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-                <td>{% for incident in day.incidents %}<span class="badge badge-warning">{{ incident.label }} {{ incident.at|date:"H:i" }}</span> {% empty %}<span class="muted">—</span>{% endfor %}</td>
+                <td>{% for incident in day.incidents %}<span class="badge badge-warning">{{ incident.label }} {{ incident.at|date:"H:i" }}</span> {% if can_correct %}<button type="button" class="btn btn-ghost btn-sm" data-correct="{{ incident.at|date:'Y-m-d' }}T{{ incident.at|date:'H:i' }}" data-kind="{% if incident.label == 'Salida sin entrada' %}entry{% else %}exit{% endif %}">Corregir</button>{% endif %} {% empty %}<span class="muted">—</span>{% endfor %}</td>
               </tr>
               {% empty %}
               <tr><td colspan="6"><div class="empty">{% icon "calendar" %}<strong>Sin jornadas en este periodo</strong></div></td></tr>
@@ -99,19 +99,81 @@
       </section>
 
       <section class="card">
-        <header class="card-header"><div><h2>Últimos movimientos</h2></div><a class="btn btn-ghost btn-sm" href="{% url 'attendance_history' %}?employee={{ employee.pk }}">Ver todos</a></header>
-        <div class="list">
-          {% for mark in recent_marks %}
+        <header class="card-header">
+          <div><h2>Movimientos del periodo</h2>{% if can_correct %}<p>Correcciones activadas por Sistemas</p>{% endif %}</div>
+          <div class="row">
+            {% if can_correct %}<button type="button" class="btn btn-secondary btn-sm" data-correct="">{% icon "plus" "sm" %}Agregar</button>{% endif %}
+            <a class="btn btn-ghost btn-sm" href="{% url 'attendance_history' %}?employee={{ employee.pk }}&amp;from=2000-01-01">Historial</a>
+          </div>
+        </header>
+        <div class="list list-scroll">
+          {% for mark in period_marks %}
           <div class="list-item">
-            <div class="list-item-main"><strong>{% if mark.mark_type == "entry" %}Entrada{% else %}Salida{% endif %}</strong><small>{% if mark.capture_mode == "hid" %}Lector de tarjetas{% else %}Manual{% if mark.registered_by %} · @{{ mark.registered_by.username }}{% endif %}{% endif %}</small></div>
+            <div class="list-item-main">
+              <strong>{% if mark.mark_type == "entry" %}Entrada{% else %}Salida{% endif %}{% if mark.capture_mode == "correction" %} <span class="badge badge-info">Corrección</span>{% endif %}</strong>
+              <small>{% if mark.capture_mode == "hid" %}Lector de tarjetas{% elif mark.capture_mode == "correction" %}{{ mark.correction_reason }}{% else %}Manual{% endif %}{% if mark.registered_by %} · @{{ mark.registered_by.username }}{% endif %}</small>
+            </div>
             <div class="list-item-side num">{{ mark.marked_at|date:"d/m/Y" }}<span>{{ mark.marked_at|date:"H:i:s" }}</span></div>
+            {% if can_correct %}<button type="button" class="btn btn-ghost btn-icon btn-sm" data-void="{% url 'employees:correction_void' employee.pk mark.pk %}" data-label="{% if mark.mark_type == 'entry' %}Entrada{% else %}Salida{% endif %} del {{ mark.marked_at|date:'d/m/Y H:i' }}" title="Anular" aria-label="Anular marcaje">{% icon "x" "sm" %}</button>{% endif %}
           </div>
           {% empty %}
-          <div class="empty"><strong>Sin movimientos</strong></div>
+          <div class="empty"><strong>Sin movimientos en este periodo</strong></div>
           {% endfor %}
         </div>
       </section>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if can_correct %}
+<dialog class="modal modal-sm" id="correction-modal" aria-labelledby="correction-title">
+  <form method="post" action="{% url 'employees:correction_add' employee.pk %}">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <header class="modal-header"><h2 id="correction-title">Agregar marcaje olvidado</h2><button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Cerrar">{% icon "x" %}</button></header>
+    <div class="modal-body stack">
+      <div class="form-grid">
+        <div class="field"><label for="correction-type">Tipo</label><select id="correction-type" name="mark_type" class="select"><option value="entry">Entrada</option><option value="exit">Salida</option></select></div>
+        <div class="field"><label for="correction-at">Fecha y hora</label><input id="correction-at" class="input" type="datetime-local" name="marked_at" max="{{ now_local }}" required></div>
+      </div>
+      <div class="field"><label for="correction-reason">Motivo</label><input id="correction-reason" class="input" name="reason" minlength="5" maxlength="255" required placeholder="Ej. Olvidó marcar la salida; confirmado por su supervisor"></div>
+      <p class="field-hint">Queda registrado en la auditoría con su usuario.</p>
+    </div>
+    <footer class="modal-footer"><button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button><button class="btn btn-primary" type="submit">Agregar</button></footer>
+  </form>
+</dialog>
+<dialog class="modal modal-sm" id="void-modal" aria-labelledby="void-title">
+  <form method="post" id="void-form">
+    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <header class="modal-header"><h2 id="void-title">Anular marcaje</h2><button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Cerrar">{% icon "x" %}</button></header>
+    <div class="modal-body stack">
+      <p>Se anulará la <strong id="void-label"></strong>. Dejará de contar para las horas, pero se conserva en el historial.</p>
+      <div class="field"><label for="void-reason">Motivo</label><input id="void-reason" class="input" name="reason" minlength="5" maxlength="255" required placeholder="Ej. Marcaje duplicado por error"></div>
+    </div>
+    <footer class="modal-footer"><button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button><button class="btn btn-danger" type="submit">Anular</button></footer>
+  </form>
+</dialog>
+<script>
+  document.querySelectorAll('[data-correct]').forEach((button) => button.addEventListener('click', () => {
+    const modal = document.getElementById('correction-modal');
+    if (button.dataset.correct) {
+      // Propone 1 minuto después de la entrada huérfana (o 1 minuto antes de la salida huérfana); se ajusta a la hora real.
+      const at = new Date(button.dataset.correct);
+      at.setMinutes(at.getMinutes() + (button.dataset.kind === 'entry' ? -1 : 1));
+      const pad = (value) => String(value).padStart(2, '0');
+      document.getElementById('correction-at').value = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}`;
+    }
+    if (button.dataset.kind) document.getElementById('correction-type').value = button.dataset.kind;
+    modal.showModal();
+    document.getElementById('correction-reason').focus();
+  }));
+  document.querySelectorAll('[data-void]').forEach((button) => button.addEventListener('click', () => {
+    document.getElementById('void-form').action = button.dataset.void;
+    document.getElementById('void-label').textContent = button.dataset.label;
+    document.getElementById('void-modal').showModal();
+    document.getElementById('void-reason').focus();
+  }));
+</script>
+{% endif %}
 {% endblock %}

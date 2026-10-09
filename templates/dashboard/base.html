@@ -13,9 +13,13 @@
       <a class="nav-link {% if active_page == 'overview' %}active{% endif %}" href="{% url 'dashboard' %}">{% icon "home" %}Resumen</a>
       {% if access.monitor_door %}
       <a class="nav-link {% if active_page == 'attendance' %}active{% endif %}" href="{% url 'attendance_monitor' %}">{% icon "door" %}Garita</a>
+      <a class="nav-link {% if active_page == 'presence' %}active{% endif %}" href="{% url 'presence' %}">{% icon "users" %}Presencia</a>
       {% endif %}
       {% if access.view_employees %}
-      <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">{% icon "users" %}Personal</a>
+      <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'employees:list' %}">{% icon "card" %}Personal</a>
+      {% endif %}
+      {% if can_see_alerts %}
+      <a class="nav-link {% if active_page == 'alerts' %}active{% endif %}" href="{% url 'alert_list' %}">{% icon "bell" %}Alertas{% if open_alert_count %}<span class="nav-count">{{ open_alert_count }}</span>{% endif %}</a>
       {% endif %}
       {% if access.view_attendance_history %}
       <a class="nav-link {% if active_page == 'attendance_history' %}active{% endif %}" href="{% url 'attendance_history' %}">{% icon "clock" %}Movimientos</a>
@@ -25,13 +29,14 @@
       {% endif %}
     </nav>
 
-    {% if access.manage_users or access.view_audit or access.manage_structure or access.configure_devices %}
+    {% if access.manage_users or access.view_audit or access.manage_structure or access.configure_devices or access.manage_system %}
     <div class="nav-label">Administración</div>
     <nav aria-label="Administración">
       {% if access.manage_users %}<a class="nav-link {% if active_page == 'users' %}active{% endif %}" href="{% url 'user_list' %}">{% icon "shield" %}Usuarios</a>{% endif %}
       {% if access.manage_structure %}<a class="nav-link {% if active_page == 'structure' %}active{% endif %}" href="{% url 'employees:structure' %}">{% icon "tree" %}Estructura</a>{% endif %}
       {% if access.configure_devices %}<a class="nav-link {% if active_page == 'device_config' %}active{% endif %}" href="{% url 'device_config' %}">{% icon "chip" %}Lector HID</a>{% endif %}
       {% if access.view_audit %}<a class="nav-link {% if active_page == 'audit' %}active{% endif %}" href="{% url 'audit_log' %}">{% icon "list" %}Auditoría</a>{% endif %}
+      {% if access.manage_system %}<a class="nav-link {% if active_page == 'system' %}active{% endif %}" href="{% url 'system_settings' %}">{% icon "settings" %}Sistema</a>{% endif %}
     </nav>
     {% endif %}
 
@@ -58,7 +63,14 @@
         <h1>{% block page_title %}{% endblock %}</h1>
         {% block page_subtitle %}{% endblock %}
       </div>
-      <div class="topbar-actions">{% block page_actions %}{% endblock %}</div>
+      <div class="topbar-actions">
+        {% block page_actions %}{% endblock %}
+        {% if can_see_alerts %}
+        <a class="btn btn-ghost btn-icon alert-bell {% if open_alert_count %}has-alerts{% endif %}" href="{% url 'alert_list' %}" id="alert-bell" data-summary-url="{% url 'alert_summary' %}" title="Alertas" aria-label="Alertas: {{ open_alert_count }} abiertas">
+          {% icon "bell" %}<span class="alert-count" id="alert-count" {% if not open_alert_count %}hidden{% endif %}>{{ open_alert_count }}</span>
+        </a>
+        {% endif %}
+      </div>
     </header>
 
     <main class="content" id="contenido" tabindex="-1">

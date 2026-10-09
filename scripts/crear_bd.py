@@ -2,41 +2,29 @@
 
 Lo ejecuta el instalador antes de `manage.py migrate`, porque Django no puede crear la base de datos.
 """
-import os
-import re
 import sys
 from pathlib import Path
 
-import pyodbc
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
+
+from core import sqlserver  # noqa: E402  (core/sqlserver.py no depende de Django)
 
 
 def main():
     load_dotenv(BASE_DIR / ".env")
-    name = os.getenv("DB_NAME", "").strip()
-    host = os.getenv("DB_HOST", "").strip()
-    if not re.fullmatch(r"[A-Za-z0-9_]+", name) or not host:
-        sys.exit("DB_NAME (solo letras, números y _) y DB_HOST son obligatorios en .env.")
-    port = os.getenv("DB_PORT", "").strip()
-    parts = [
-        f"DRIVER={{{os.getenv('DB_DRIVER', 'ODBC Driver 18 for SQL Server')}}}",
-        f"SERVER={host},{port}" if port else f"SERVER={host}",
-        "DATABASE=master",
-        "TrustServerCertificate=yes",
-    ]
-    if os.getenv("DB_AUTH", "sql").lower() in {"windows", "trusted"}:
-        parts.append("Trusted_Connection=yes")
-    else:
-        parts += [f"UID={os.getenv('DB_USER', '')}", f"PWD={os.getenv('DB_PASSWORD', '')}"]
     try:
-        connection = pyodbc.connect(";".join(parts), autocommit=True, timeout=15)
-    except pyodbc.Error as error:
-        sys.exit(f"No se pudo conectar a SQL Server en {host}: {error}")
+        name = sqlserver.database_name()
+        connection = sqlserver.connect()
+    except ValueError as error:
+        sys.exit(str(error))
+    except Exception as error:  # pyodbc.Error y similares: se muestra el motivo al instalador.
+        sys.exit(f"No se pudo conectar a SQL Server: {error}")
     with connection:
         connection.execute(f"IF DB_ID(N'{name}') IS NULL CREATE DATABASE [{name}]")
-    print(f"Base de datos '{name}' lista en {host}.")
+    print(f"Base de datos '{name}' lista.")
 
 
 if __name__ == "__main__":

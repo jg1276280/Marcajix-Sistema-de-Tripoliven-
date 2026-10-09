@@ -1,0 +1,152 @@
+{% extends "dashboard/base.html" %}
+{% load ui %}
+{% block title %}Sistema{% endblock %}
+{% block page_title %}Sistema{% endblock %}
+{% block page_subtitle %}<p>Respaldos de la base de datos y opciones generales</p>{% endblock %}
+
+{% block page_content %}
+<div class="grid-main">
+  <form class="card" method="post" novalidate id="system-form">
+    {% csrf_token %}
+    <header class="card-header"><div><h2>Respaldos automáticos</h2><p>Copia completa de la base de datos una vez al día</p></div></header>
+    <div class="card-body stack">
+      {% if form.non_field_errors %}<div class="form-errors">{{ form.non_field_errors.0 }}</div>{% endif %}
+      <label class="switch">{{ form.backup_enabled }}<span class="switch-text"><strong>Respaldar todos los días</strong><small>Marcajix crea el respaldo a la hora indicada aunque nadie haya iniciado sesión.</small></span></label>
+
+      <div class="field {% if form.backup_path.errors %}has-error{% endif %}">
+        <label for="backup-path">Carpeta de respaldos</label>
+        <div class="input-group">
+          {{ form.backup_path }}
+          <button type="button" class="btn btn-secondary" id="browse-btn">{% icon "folder" "sm" %}Examinar…</button>
+        </div>
+        <span class="field-hint">Para carpetas de red use la ruta completa (\\SERVIDOR\Carpeta), no una letra de unidad: las unidades conectadas no existen para el servicio de Marcajix.</span>
+        {% for error in form.backup_path.errors %}<span class="field-error">{{ error }}</span>{% endfor %}
+        <span id="folder-test-result" class="text-sm" role="status"></span>
+      </div>
+
+      <div class="form-grid">
+        {% include "partials/field.html" with field=form.backup_time %}
+        {% include "partials/field.html" with field=form.backup_retention_days %}
+      </div>
+    </div>
+
+    <header class="card-header"><div><h2>Correcciones de marcajes</h2><p>Recursos Humanos podrá añadir marcajes olvidados o anular marcajes erróneos</p></div></header>
+    <div class="card-body">
+      <label class="switch">{{ form.allow_attendance_corrections }}<span class="switch-text"><strong>Permitir correcciones</strong><small>Cada corrección exige un motivo y queda en la auditoría con el usuario que la hizo. Los marcajes anulados se conservan, pero dejan de contar.</small></span></label>
+    </div>
+
+    <footer class="card-footer row-between">
+      <button type="button" class="btn btn-secondary" id="test-folder-btn">{% icon "check" "sm" %}Probar carpeta</button>
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </footer>
+  </form>
+
+  <div class="stack">
+    <section class="card">
+      <header class="card-header">
+        <div><h2>Último respaldo</h2></div>
+        {% if config.last_backup_status == "ok" %}<span class="badge badge-success"><i class="dot"></i>Correcto</span>{% elif config.last_backup_status == "error" %}<span class="badge badge-danger"><i class="dot"></i>Falló</span>{% else %}<span class="badge">Sin respaldos</span>{% endif %}
+      </header>
+      <dl class="facts">
+        <div class="fact"><dt>Último correcto</dt><dd>{{ config.last_backup_ok_at|date:"d/m/Y H:i"|default:"Nunca" }}</dd></div>
+        <div class="fact"><dt>Último intento</dt><dd>{{ config.last_backup_attempt_at|date:"d/m/Y H:i"|default:"—" }}</dd></div>
+      </dl>
+      {% if config.last_backup_message %}<div class="card-body"><div class="alert {% if config.last_backup_status == 'error' %}alert-error{% else %}alert-success{% endif %}">{{ config.last_backup_message }}</div></div>{% endif %}
+      <footer class="card-footer">
+        <form method="post" action="{% url 'backup_now' %}" id="backup-now-form">{% csrf_token %}<button class="btn btn-primary btn-block" type="submit" {% if not config.backup_path %}disabled title="Guarde primero una carpeta"{% endif %}>{% icon "database" "sm" %}Respaldar ahora</button></form>
+      </footer>
+    </section>
+
+    <section class="card">
+      <header class="card-header"><div><h2>Respaldos en la carpeta</h2><p>Los más recientes</p></div></header>
+      <div class="list">
+        {% for item in backups %}
+        <div class="list-item">
+          {% icon "database" "sm" %}
+          <div class="list-item-main"><strong class="mono">{{ item.name }}</strong><small>{{ item.modified|date:"d/m/Y H:i" }}</small></div>
+          <span class="list-item-side num">{{ item.size_mb|floatformat:1 }} MB</span>
+        </div>
+        {% empty %}
+        <div class="empty">{% icon "folder" %}<strong>Sin respaldos todavía</strong><span>Elija una carpeta y pulse «Respaldar ahora» para comprobar que todo funciona.</span></div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<dialog class="modal modal-md" id="folder-modal" aria-labelledby="folder-modal-title">
+  <header class="modal-header"><h2 id="folder-modal-title">Elegir carpeta</h2><button type="button" class="btn btn-ghost btn-icon" data-close-modal aria-label="Cerrar">{% icon "x" %}</button></header>
+  <div class="folder-path">
+    <button type="button" class="btn btn-secondary btn-icon btn-sm" id="folder-up" title="Subir un nivel" aria-label="Subir un nivel">{% icon "arrow-up" "sm" %}</button>
+    <input class="input" id="folder-current" type="text" placeholder="\\SERVIDOR\Carpeta" spellcheck="false" aria-label="Ruta">
+    <button type="button" class="btn btn-secondary btn-sm" id="folder-go">Ir</button>
+  </div>
+  <div class="folder-list" id="folder-list" aria-live="polite"></div>
+  <footer class="modal-footer"><button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button><button type="button" class="btn btn-primary" id="folder-choose">Usar esta carpeta</button></footer>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const CSRF = document.querySelector('#system-form [name=csrfmiddlewaretoken]').value;
+  const pathInput = document.getElementById('backup-path');
+  const modal = document.getElementById('folder-modal');
+  const list = document.getElementById('folder-list');
+  const current = document.getElementById('folder-current');
+  const result = document.getElementById('folder-test-result');
+  let parent = null;
+
+  const open = async (path) => {
+    list.innerHTML = '<div class="empty">Cargando…</div>';
+    try {
+      const response = await fetch(`{% url 'browse_folders' %}?path=${encodeURIComponent(path || '')}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      current.value = data.path;
+      parent = data.parent;
+      document.getElementById('folder-up').disabled = parent === null;
+      list.innerHTML = data.folders.map((folder) => `<button type="button" class="folder-item" data-path="${escapeHtml(folder.path)}"><svg class="icon icon-sm"><use href="#i-folder"/></svg>${escapeHtml(folder.name)}</button>`).join('')
+        || '<div class="empty"><strong>Sin subcarpetas</strong><span>Puede usar esta carpeta o escribir otra ruta arriba.</span></div>';
+    } catch (error) {
+      list.innerHTML = `<div class="empty"><strong>No se pudo abrir</strong><span>${escapeHtml(error.message || 'Error al consultar el servidor.')}</span></div>`;
+    }
+  };
+
+  document.getElementById('browse-btn').addEventListener('click', () => { modal.showModal(); open(pathInput.value.trim()); });
+  list.addEventListener('click', (event) => { const item = event.target.closest('.folder-item'); if (item) open(item.dataset.path); });
+  document.getElementById('folder-up').addEventListener('click', () => open(parent || ''));
+  document.getElementById('folder-go').addEventListener('click', () => open(current.value.trim()));
+  current.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); open(current.value.trim()); } });
+  document.getElementById('folder-choose').addEventListener('click', () => {
+    if (!current.value.trim()) return;
+    pathInput.value = current.value.trim();
+    modal.close();
+    result.textContent = 'Carpeta elegida. Pulse «Guardar» para aplicarla.';
+    result.className = 'text-sm muted';
+  });
+
+  document.getElementById('test-folder-btn').addEventListener('click', async () => {
+    const body = new FormData();
+    body.append('path', pathInput.value.trim());
+    result.textContent = 'Comprobando…';
+    result.className = 'text-sm muted';
+    try {
+      const response = await fetch('{% url "test_backup_folder" %}', { method: 'POST', body, headers: { 'X-CSRFToken': CSRF } });
+      const data = await response.json();
+      result.textContent = data.message;
+      result.className = `text-sm ${data.ok ? 'text-success' : 'text-danger'}`;
+    } catch (error) {
+      result.textContent = 'No se pudo contactar con el servidor.';
+      result.className = 'text-sm text-danger';
+    }
+  });
+
+  document.getElementById('backup-now-form').addEventListener('submit', (event) => {
+    const button = event.target.querySelector('button');
+    button.disabled = true;
+    button.textContent = 'Respaldando… (puede tardar un minuto)';
+  });
+})();
+</script>
+{% endblock %}
